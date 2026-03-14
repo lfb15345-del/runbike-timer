@@ -1,0 +1,728 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:camera/camera.dart';
+import 'package:path_provider/path_provider.dart';
+import '../services/database_service.dart';
+
+/// タイマーの状態
+enum TimerState { waiting, countdown, measuring }
+
+/// 計測タブ（メイン画面）
+class MeasureScreen extends StatefulWidget {
+  const MeasureScreen({super.key});
+
+  @override
+  State<MeasureScreen> createState() => _MeasureScreenState();
+}
+
+class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserver {
+  TimerState _state = TimerState.waiting;
+  bool _isTeamMode = false;
+
+  // 現在の練習対象の子ども
+  int? _currentChildId;
+  String _currentChildName = '未選択';
+  List<Map<String, dynamic>> _children = [];
+
+  // スタート音の設定
+  final Map<String, int> _startOffsets = {
+    'silent': 0,
+    'basic': 10600,
+    'final': 15500,
+    'semi': 20050,
+  };
+  final Map<String, String?> _soundFiles = {
+    'silent': null,
+    'basic': 'sounds/start02.mp3',
+    'final': 'sounds/start01.mp3',
+    'semi': 'sounds/start03.mp3',
+  };
+  final Map<String, String> _soundLabels = {
+    'silent': 'サイレント',
+    'basic': '基本',
+    'final': '決勝',
+    'semi': '準決勝',
+  };
+  String _selectedSound = 'basic';
+
+  // タイマー関連
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  Timer? _timer;
+  DateTime? _measureStartTime;
+  int _elapsedMs = 0;
+
+  // カメラ関連
+  bool _isRecordingEnabled = false;
+  CameraController? _cameraController;
+  List<CameraDescription>? _cameras;
+  bool _isCameraInitialized = false;
+  bool _isVideoRecording = false;
+  String? _lastVideoPath;
+
+  // チームモード
+  final Map<int, int> _teamFinished = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadChildren();
+    _initCameras();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    _audioPlayer.dispose();
+    _cameraController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+    if (state == AppLifecycleState.inactive) {
+      _cameraController?.dispose();
+      _isCameraInitialized = false;
+    } else if (state == AppLifecycleState.resumed) {
+      if (_isRecordingEnabled) {
+        _setupCamera();
+      }
+    }
+  }
+
+  /// カメラ一覧を取得
+  Future<void> _initCameras() async {
+    if (kIsWeb) return; // Web版ではカメラ無効
+    try {
+      _cameras = await availableCameras();
+    } catch (e) {
+      debugPrint('カメラ取得エラー: $e');
+    }
+  }
+
+  /// カメラをセットアップ
+  Future<void> _setupCamera() async {
+    if (_cameras == null || _cameras!.isEmpty) return;
+
+    // 背面カメラを優先
+    final camera = _cameras!.firstWhere(
+      (c) => c.lensDirection == CameraLensDirection.back,
+      orElse: () => _cameras!.first,
+    );
+
+    _cameraController = CameraController(
+      camera,
+      ResolutionPreset.medium,
+      enableAudio: true,
+    );
+
+    try {
+      await _cameraController!.initialize();
+      if (mounted) {
+        setState(() => _isCameraInitialized = true);
+      }
+    } catch (e) {
+      debugPrint('カメラ初期化エラー: $e');
+    }
+  }
+
+  /// カメラを破棄
+  Future<void> _disposeCamera() async {
+    if (_isVideoRecording) {
+      await _stopVideoRecording();
+    }
+    await _cameraController?.dispose();
+    _cameraController = null;
+    setState(() => _isCameraInitialized = false);
+  }
+
+  /// 録画開始
+  Future<void> _startVideoRecording() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+    if (_cameraController!.value.isRecordingVideo) return;
+
+    try {
+      await _cameraController!.startVideoRecording();
+      setState(() => _isVideoRecording = true);
+    } catch (e) {
+      debugPrint('録画開始エラー: $e');
+    }
+  }
+
+  /// 録画停止・保存
+  Future<void> _stopVideoRecording() async {
+    if (_cameraController == null || !_cameraController!.value.isRecordingVideo) {
+      setState(() => _isVideoRecording = false);
+      return;
+    }
+
+    try {
+      final file = await _cameraController!.stopVideoRecording();
+      setState(() {
+        _isVideoRecording = false;
+        _lastVideoPath = file.path;
+      });
+      _showMessage('動画を保存しました');
+    } catch (e) {
+      debugPrint('録画停止エラー: $e');
+      setState(() => _isVideoRecording = false);
+    }
+  }
+
+  /// 子どもリストを読み込む
+  Future<void> _loadChildren() async {
+    final children = await DatabaseService.getChildren();
+    setState(() {
+      _children = children;
+      if (_currentChildId == null && children.isNotEmpty) {
+        _currentChildId = children.first['id'] as int;
+        _currentChildName = children.first['name'] as String;
+      }
+    });
+  }
+
+  /// タイムを見やすい文字列に変換
+  String _formatTime(int ms) {
+    final seconds = ms ~/ 1000;
+    final millis = ms % 1000;
+    return '${seconds.toString().padLeft(2, '0')}.${millis.toString().padLeft(3, '0')}';
+  }
+
+  /// スタートボタン押下
+  Future<void> _onStart() async {
+    final offset = _startOffsets[_selectedSound]!;
+    final soundFile = _soundFiles[_selectedSound];
+
+    setState(() => _state = TimerState.countdown);
+
+    // 録画ONなら録画開始
+    if (_isRecordingEnabled && _isCameraInitialized) {
+      await _startVideoRecording();
+    }
+
+    final DateTime measureStart;
+
+    if (soundFile != null) {
+      final playStartTime = DateTime.now();
+      _audioPlayer.play(AssetSource(soundFile));
+      measureStart = playStartTime.add(Duration(milliseconds: offset));
+
+      final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
+      if (waitMs > 0) {
+        await Future.delayed(Duration(milliseconds: waitMs));
+      }
+
+      if (_state != TimerState.countdown) return;
+    } else {
+      measureStart = DateTime.now();
+    }
+
+    setState(() {
+      _state = TimerState.measuring;
+      _measureStartTime = measureStart;
+      _elapsedMs = 0;
+    });
+
+    _timer = Timer.periodic(const Duration(milliseconds: 10), (_) {
+      if (_measureStartTime != null) {
+        setState(() {
+          _elapsedMs = DateTime.now().difference(_measureStartTime!).inMilliseconds;
+        });
+      }
+    });
+  }
+
+  /// 中止ボタン
+  void _onCancel() {
+    _audioPlayer.stop();
+    _timer?.cancel();
+
+    // 録画中なら停止
+    if (_isVideoRecording) {
+      _stopVideoRecording();
+    }
+
+    setState(() {
+      _state = TimerState.waiting;
+      _elapsedMs = 0;
+      _measureStartTime = null;
+      _teamFinished.clear();
+    });
+  }
+
+  /// ゴールボタン（個人モード）
+  Future<void> _onGoal() async {
+    final finalTime = DateTime.now().difference(_measureStartTime!).inMilliseconds;
+    _timer?.cancel();
+
+    // 録画中なら停止
+    if (_isVideoRecording) {
+      await _stopVideoRecording();
+    }
+
+    setState(() {
+      _elapsedMs = finalTime;
+      _state = TimerState.waiting;
+      _measureStartTime = null;
+    });
+
+    if (_currentChildId == null) {
+      _showMessage('先に子どもを登録してください');
+      return;
+    }
+
+    final sessionId = await DatabaseService.getTodaySessionId();
+    final runId = await DatabaseService.addRun(
+      sessionId: sessionId,
+      startSoundType: _selectedSound,
+    );
+    await DatabaseService.addRunResult(
+      runId: runId,
+      childId: _currentChildId!,
+      timeMs: finalTime,
+    );
+
+    _showMessage('${_formatTime(finalTime)} 秒 を記録しました！');
+  }
+
+  /// チームモードでゴール
+  Future<void> _onTeamGoal(int childId, String childName) async {
+    if (_measureStartTime == null) return;
+    if (_teamFinished.containsKey(childId)) return;
+
+    final finalTime = DateTime.now().difference(_measureStartTime!).inMilliseconds;
+
+    setState(() {
+      _teamFinished[childId] = finalTime;
+    });
+
+    final sessionId = await DatabaseService.getTodaySessionId();
+    final runId = await DatabaseService.addRun(
+      sessionId: sessionId,
+      startSoundType: _selectedSound,
+    );
+    await DatabaseService.addRunResult(
+      runId: runId,
+      childId: childId,
+      timeMs: finalTime,
+    );
+  }
+
+  /// メッセージ表示
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  /// 録画スイッチのON/OFF
+  Future<void> _toggleRecording(bool value) async {
+    if (kIsWeb) {
+      _showMessage('Web版では録画機能は使えません');
+      return;
+    }
+
+    setState(() => _isRecordingEnabled = value);
+
+    if (value) {
+      await _setupCamera();
+    } else {
+      await _disposeCamera();
+    }
+  }
+
+  /// 子ども選択ダイアログ
+  Future<void> _showChildSelector() async {
+    await _loadChildren();
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('練習する子どもを選択'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ..._children.map((child) => ListTile(
+                title: Text(child['name'] as String),
+                selected: child['id'] == _currentChildId,
+                onTap: () {
+                  setState(() {
+                    _currentChildId = child['id'] as int;
+                    _currentChildName = child['name'] as String;
+                  });
+                  Navigator.pop(context);
+                },
+              )),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text('新しい子どもを追加'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddChildDialog();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 子ども追加ダイアログ
+  Future<void> _showAddChildDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('子どもの名前を入力'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '例: ゆうた'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('追加'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.trim().isNotEmpty) {
+      final id = await DatabaseService.addChild(result.trim());
+      await _loadChildren();
+      setState(() {
+        _currentChildId = id;
+        _currentChildName = result.trim();
+      });
+    }
+  }
+
+  /// カメラプレビューウィジェット（ワイプ表示）
+  Widget _buildCameraPreview() {
+    if (!_isCameraInitialized || _cameraController == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: GestureDetector(
+        onTap: () {
+          // タップで前面/背面カメラ切替
+          if (_cameras != null && _cameras!.length > 1) {
+            final currentDirection = _cameraController!.description.lensDirection;
+            final newCamera = _cameras!.firstWhere(
+              (c) => c.lensDirection != currentDirection,
+              orElse: () => _cameras!.first,
+            );
+            _cameraController?.dispose();
+            _cameraController = CameraController(
+              newCamera,
+              ResolutionPreset.medium,
+              enableAudio: true,
+            );
+            _cameraController!.initialize().then((_) {
+              if (mounted) setState(() {});
+            });
+          }
+        },
+        child: Container(
+          width: 120,
+          height: 160,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isVideoRecording ? Colors.red : Colors.white,
+              width: _isVideoRecording ? 3 : 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(2, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: CameraPreview(_cameraController!),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final dateStr = '${today.year}/${today.month.toString().padLeft(2, '0')}/${today.day.toString().padLeft(2, '0')}';
+
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // --- 上部: 日付・子ども・モード ---
+                  Text(dateStr, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '練習対象: $_currentChildName',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _state == TimerState.waiting ? _showChildSelector : null,
+                        child: const Text('変更'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('個人'),
+                      Switch(
+                        value: _isTeamMode,
+                        onChanged: _state == TimerState.waiting
+                            ? (v) => setState(() => _isTeamMode = v)
+                            : null,
+                      ),
+                      const Text('チーム'),
+                    ],
+                  ),
+
+                  const Spacer(),
+
+                  // --- 中央: タイマー表示 ---
+                  Text(
+                    _formatTime(_elapsedMs),
+                    style: const TextStyle(
+                      fontSize: 72,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _state == TimerState.waiting
+                        ? '待機中'
+                        : _state == TimerState.countdown
+                            ? 'カウントダウン中...'
+                            : '計測中',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: _state == TimerState.measuring ? Colors.red : Colors.grey,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // --- スタート音選択 ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: _soundLabels.entries.map((entry) {
+                      final isSelected = _selectedSound == entry.key;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: ChoiceChip(
+                          label: Text(entry.value),
+                          selected: isSelected,
+                          onSelected: _state == TimerState.waiting
+                              ? (_) => setState(() => _selectedSound = entry.key)
+                              : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // --- 録画スイッチ ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _isVideoRecording ? Icons.fiber_manual_record : Icons.videocam,
+                        size: 20,
+                        color: _isVideoRecording ? Colors.red : null,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isVideoRecording ? '録画中' : '録画',
+                        style: TextStyle(
+                          color: _isVideoRecording ? Colors.red : null,
+                          fontWeight: _isVideoRecording ? FontWeight.bold : null,
+                        ),
+                      ),
+                      Switch(
+                        value: _isRecordingEnabled,
+                        onChanged: _state == TimerState.waiting ? _toggleRecording : null,
+                        activeColor: Colors.red,
+                      ),
+                    ],
+                  ),
+
+                  const Spacer(),
+
+                  // --- メイン操作ボタン ---
+                  if (_state == TimerState.waiting)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 80,
+                      child: ElevatedButton(
+                        onPressed: _onStart,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text('スタート（3,2,1,GO!）',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+
+                  if (_state == TimerState.countdown)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 80,
+                      child: ElevatedButton(
+                        onPressed: _onCancel,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text('中止',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+
+                  if (_state == TimerState.measuring && !_isTeamMode)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 80,
+                      child: ElevatedButton(
+                        onPressed: _onGoal,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text('ゴール！',
+                            style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+
+                  // --- チームモード: 子どもボタン ---
+                  if (_isTeamMode && _state == TimerState.measuring) ...[
+                    Expanded(
+                      child: GridView.count(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 2.2,
+                        children: _children.map((child) {
+                          final childId = child['id'] as int;
+                          final childName = child['name'] as String;
+                          final isFinished = _teamFinished.containsKey(childId);
+                          final finishTime = _teamFinished[childId];
+                          int rank = 0;
+                          if (isFinished) {
+                            rank = _teamFinished.values
+                                .where((t) => t <= finishTime!)
+                                .length;
+                          }
+
+                          return ElevatedButton(
+                            onPressed: isFinished
+                                ? null
+                                : () => _onTeamGoal(childId, childName),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isFinished ? Colors.grey[400] : Colors.blue,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.green[100],
+                              disabledForegroundColor: Colors.green[900],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  childName,
+                                  style: TextStyle(
+                                    fontSize: isFinished ? 16 : 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (isFinished)
+                                  Text(
+                                    '${rank}着 ${_formatTime(finishTime!)}秒',
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _onCancel,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('次のレースへ', style: TextStyle(fontSize: 18)),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+
+            // --- カメラプレビュー（ワイプ） ---
+            if (_isRecordingEnabled && _isCameraInitialized)
+              _buildCameraPreview(),
+          ],
+        ),
+      ),
+    );
+  }
+}
