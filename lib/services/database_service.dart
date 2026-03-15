@@ -113,6 +113,10 @@ class DatabaseService {
     return results;
   }
 
+  static Future<void> deleteRunResult(int runResultId) async {
+    _runResults.removeWhere((rr) => rr['id'] == runResultId);
+  }
+
   static Future<int?> getAllTimeBest(int childId) async {
     final doneRunIds = _runs
         .where((r) => r['status'] == 'done')

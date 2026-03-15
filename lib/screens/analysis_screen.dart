@@ -155,8 +155,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
                 const SizedBox(height: 16),
 
-                // 走行一覧
-                const Text('今日の走行一覧:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Row(
+                  children: [
+                    Text('今日の走行一覧', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    SizedBox(width: 8),
+                    Text('← スワイプで削除', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
                 const SizedBox(height: 8),
 
                 Expanded(
@@ -165,24 +170,59 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       : ListView.builder(
                           itemCount: _todayResults.length,
                           itemBuilder: (context, index) {
-                            final timeMs = _todayResults[index]['time_ms'] as int;
+                            final result = _todayResults[index];
+                            final timeMs = result['time_ms'] as int;
+                            final resultId = result['id'] as int;
                             final isBest = timeMs == _todayBest;
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: isBest ? Colors.amber : Colors.grey[300],
-                                child: Text('${index + 1}'),
+                            return Dismissible(
+                              key: ValueKey(resultId),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                color: Colors.red,
+                                child: const Icon(Icons.delete, color: Colors.white),
                               ),
-                              title: Text(
-                                '${_formatTime(timeMs)} 秒',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: isBest ? FontWeight.bold : FontWeight.normal,
-                                  color: isBest ? Colors.amber[800] : null,
+                              confirmDismiss: (direction) async {
+                                return await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('記録を削除'),
+                                    content: Text('${_formatTime(timeMs)}秒 の記録を削除しますか？'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('キャンセル'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        child: const Text('削除', style: TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                ) ?? false;
+                              },
+                              onDismissed: (_) async {
+                                await DatabaseService.deleteRunResult(resultId);
+                                await _selectChild(_selectedChildId!, _selectedChildName);
+                              },
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isBest ? Colors.amber : Colors.grey[300],
+                                  child: Text('${index + 1}'),
                                 ),
+                                title: Text(
+                                  '${_formatTime(timeMs)} 秒',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: isBest ? FontWeight.bold : FontWeight.normal,
+                                    color: isBest ? Colors.amber[800] : null,
+                                  ),
+                                ),
+                                trailing: isBest
+                                    ? const Icon(Icons.star, color: Colors.amber)
+                                    : null,
                               ),
-                              trailing: isBest
-                                  ? const Icon(Icons.star, color: Colors.amber)
-                                  : null,
                             );
                           },
                         ),
