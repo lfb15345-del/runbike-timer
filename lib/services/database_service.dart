@@ -5,6 +5,10 @@ import 'package:sqflite/sqflite.dart';
 class DatabaseService {
   static Database? _db;
 
+  /// 現在選択中の子ども（計測タブと解析タブで共有）
+  static int? selectedChildId;
+  static String? selectedChildName;
+
   /// DB初期化（アプリ起動時に1回呼ぶ）
   static Future<void> init() async {
     if (_db != null) return;

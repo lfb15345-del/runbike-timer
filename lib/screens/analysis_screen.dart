@@ -31,12 +31,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _children = children;
     });
 
-    // 子どもが1人以上いれば最初の子を自動選択
-    if (_selectedChildId == null && children.isNotEmpty) {
-      await _selectChild(
-        children.first['id'] as int,
-        children.first['name'] as String,
-      );
+    // 計測タブで選んだ子どもを優先、なければ最初の子を自動選択
+    if (children.isNotEmpty) {
+      final sharedId = DatabaseService.selectedChildId;
+      final sharedName = DatabaseService.selectedChildName;
+      if (sharedId != null && children.any((c) => c['id'] == sharedId)) {
+        await _selectChild(sharedId, sharedName!);
+      } else if (_selectedChildId == null) {
+        await _selectChild(
+          children.first['id'] as int,
+          children.first['name'] as String,
+        );
+      }
     }
   }
 

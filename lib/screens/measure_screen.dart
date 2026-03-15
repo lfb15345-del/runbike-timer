@@ -185,6 +185,9 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
       if (_currentChildId == null && children.isNotEmpty) {
         _currentChildId = children.first['id'] as int;
         _currentChildName = children.first['name'] as String;
+        // 共有変数にも保存
+        DatabaseService.selectedChildId = _currentChildId;
+        DatabaseService.selectedChildName = _currentChildName;
       }
     });
   }
@@ -380,6 +383,8 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
                       _currentChildId = childId;
                       _currentChildName = childName;
                     });
+                    DatabaseService.selectedChildId = childId;
+                    DatabaseService.selectedChildName = childName;
                     Navigator.pop(context);
                   },
                 );
@@ -497,6 +502,8 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
         _currentChildId = id;
         _currentChildName = result.trim();
       });
+      DatabaseService.selectedChildId = id;
+      DatabaseService.selectedChildName = result.trim();
     }
   }
 
