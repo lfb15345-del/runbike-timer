@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'screens/measure_screen.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/course_screen.dart';
+import 'services/database_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseService.init();
   runApp(const RunbikeApp());
 }
 

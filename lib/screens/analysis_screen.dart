@@ -30,6 +30,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     setState(() {
       _children = children;
     });
+
+    // 子どもが1人以上いれば最初の子を自動選択
+    if (_selectedChildId == null && children.isNotEmpty) {
+      await _selectChild(
+        children.first['id'] as int,
+        children.first['name'] as String,
+      );
+    }
   }
 
   /// 子どもを選択してデータを読み込む
@@ -60,29 +68,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return '${seconds.toString().padLeft(2, '0')}.${millis.toString().padLeft(3, '0')}';
   }
 
-  /// シェアテキストを作成して共有
+  /// シェアテキストを作成（今日の記録一覧だけ）
   Future<void> _shareResults() async {
     if (_todayResults.isEmpty) return;
 
     final buffer = StringBuffer();
-    buffer.writeln('--- $_selectedChildName の練習結果！ ---');
+    buffer.writeln('$_selectedChildName の今日の記録');
     buffer.writeln('');
 
     for (int i = 0; i < _todayResults.length; i++) {
       final timeMs = _todayResults[i]['time_ms'] as int;
       final isBest = timeMs == _todayBest;
       buffer.write('${i + 1}本目: ${_formatTime(timeMs)}秒');
-      if (isBest) buffer.write(' (本日ベスト!)');
+      if (isBest && _todayResults.length > 1) buffer.write(' ★ベスト');
       buffer.writeln();
-    }
-
-    buffer.writeln('');
-    buffer.writeln('合計 ${_todayResults.length} 本');
-    if (_todayBest != null) {
-      buffer.writeln('本日ベスト: ${_formatTime(_todayBest!)}秒');
-    }
-    if (_allTimeBest != null) {
-      buffer.writeln('歴代ベスト: ${_formatTime(_allTimeBest!)}秒');
     }
 
     // Web版ではクリップボードにコピー（スマホ版では share_plus を使う）
@@ -109,29 +108,37 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 子ども選択
-              const Text('子どもを選択:', style: TextStyle(fontSize: 16)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _children.map((child) {
-                  final isSelected = child['id'] == _selectedChildId;
-                  return ChoiceChip(
-                    label: Text(child['name'] as String),
-                    selected: isSelected,
-                    onSelected: (_) => _selectChild(
-                      child['id'] as int,
-                      child['name'] as String,
-                    ),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 24),
+              // 子ども選択（複数いる場合のみ表示）
+              if (_children.length > 1) ...[
+                const Text('子どもを選択:', style: TextStyle(fontSize: 16)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _children.map((child) {
+                    final isSelected = child['id'] == _selectedChildId;
+                    return ChoiceChip(
+                      label: Text(child['name'] as String),
+                      selected: isSelected,
+                      onSelected: (_) => _selectChild(
+                        child['id'] as int,
+                        child['name'] as String,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // 選択済みの場合、データ表示
               if (_selectedChildId != null) ...[
+                // 名前表示（子ども1人の場合）
+                if (_children.length <= 1)
+                  Text(
+                    _selectedChildName,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+
                 // サマリーカード
                 Card(
                   child: Padding(
@@ -234,7 +241,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _todayResults.isNotEmpty ? _shareResults : null,
                     icon: const Icon(Icons.share),
-                    label: const Text('この子の結果をシェア'),
+                    label: const Text('今日の記録をシェア'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -242,10 +249,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 ),
               ],
 
-              if (_selectedChildId == null)
+              if (_selectedChildId == null && _children.isEmpty)
                 const Expanded(
                   child: Center(
-                    child: Text('上のボタンから子どもを選んでください',
+                    child: Text('計測タブで子どもを登録してください',
                         style: TextStyle(color: Colors.grey, fontSize: 16)),
                   ),
                 ),

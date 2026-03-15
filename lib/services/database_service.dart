@@ -1,46 +1,102 @@
-/// メモリ上でデータを管理するサービス
-/// （Web版でもすぐ動く。スマホ版に移行時にsqfliteに置き換え可能）
-class DatabaseService {
-  // --- メモリ上のデータストア ---
-  static int _nextChildId = 1;
-  static int _nextSessionId = 1;
-  static int _nextRunId = 1;
-  static int _nextRunResultId = 1;
-  static int _nextCourseId = 1;
+import 'package:sqflite/sqflite.dart';
 
-  static final List<Map<String, dynamic>> _children = [];
-  static final List<Map<String, dynamic>> _sessions = [];
-  static final List<Map<String, dynamic>> _runs = [];
-  static final List<Map<String, dynamic>> _runResults = [];
-  static final List<Map<String, dynamic>> _courses = [];
+/// sqflite を使ったデータ永続化サービス
+/// アプリを閉じてもデータが残る
+class DatabaseService {
+  static Database? _db;
+
+  /// DB初期化（アプリ起動時に1回呼ぶ）
+  static Future<void> init() async {
+    if (_db != null) return;
+
+    final dbPath = await getDatabasesPath();
+    _db = await openDatabase(
+      '$dbPath/runbike.db',
+      version: 1,
+      onCreate: (db, version) async {
+        // 子どもテーブル
+        await db.execute('''
+          CREATE TABLE child (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          )
+        ''');
+        // セッションテーブル（日ごと）
+        await db.execute('''
+          CREATE TABLE session (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            name TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+        // 走行テーブル
+        await db.execute('''
+          CREATE TABLE run (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            start_at TEXT NOT NULL,
+            start_sound_type TEXT,
+            status TEXT NOT NULL DEFAULT 'done',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES session(id)
+          )
+        ''');
+        // 走行結果テーブル
+        await db.execute('''
+          CREATE TABLE run_result (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            child_id INTEGER NOT NULL,
+            time_ms INTEGER NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES run(id),
+            FOREIGN KEY (child_id) REFERENCES child(id)
+          )
+        ''');
+        // コーステーブル
+        await db.execute('''
+          CREATE TABLE course (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            name TEXT,
+            length_m REAL,
+            first_straight_m REAL,
+            curve_count INTEGER,
+            surface TEXT,
+            weather TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+      },
+    );
+  }
 
   // --- 子ども関連 ---
 
   static Future<int> addChild(String name) async {
-    final id = _nextChildId++;
-    _children.add({
-      'id': id,
+    return await _db!.insert('child', {
       'name': name,
       'created_at': DateTime.now().toIso8601String(),
     });
-    return id;
   }
 
   static Future<List<Map<String, dynamic>>> getChildren() async {
-    return List.from(_children)..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    return await _db!.query('child', orderBy: 'name ASC');
   }
 
   static Future<void> updateChildName(int id, String newName) async {
-    for (int i = 0; i < _children.length; i++) {
-      if (_children[i]['id'] == id) {
-        _children[i] = {..._children[i], 'name': newName};
-        break;
-      }
-    }
+    await _db!.update(
+      'child',
+      {'name': newName},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   static Future<void> deleteChild(int id) async {
-    _children.removeWhere((c) => c['id'] == id);
+    await _db!.delete('child', where: 'id = ?', whereArgs: [id]);
   }
 
   // --- セッション関連 ---
@@ -48,20 +104,21 @@ class DatabaseService {
   static Future<int> getTodaySessionId() async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
 
-    for (final session in _sessions) {
-      if (session['date'] == today) {
-        return session['id'] as int;
-      }
+    final results = await _db!.query(
+      'session',
+      where: 'date = ?',
+      whereArgs: [today],
+    );
+
+    if (results.isNotEmpty) {
+      return results.first['id'] as int;
     }
 
-    final id = _nextSessionId++;
-    _sessions.add({
-      'id': id,
+    return await _db!.insert('session', {
       'date': today,
       'name': '$today の練習',
       'created_at': DateTime.now().toIso8601String(),
     });
-    return id;
   }
 
   // --- 走行結果関連 ---
@@ -70,16 +127,13 @@ class DatabaseService {
     required int sessionId,
     required String startSoundType,
   }) async {
-    final id = _nextRunId++;
-    _runs.add({
-      'id': id,
+    return await _db!.insert('run', {
       'session_id': sessionId,
       'start_at': DateTime.now().toIso8601String(),
       'start_sound_type': startSoundType,
       'status': 'done',
       'created_at': DateTime.now().toIso8601String(),
     });
-    return id;
   }
 
   static Future<void> addRunResult({
@@ -87,8 +141,7 @@ class DatabaseService {
     required int childId,
     required int timeMs,
   }) async {
-    _runResults.add({
-      'id': _nextRunResultId++,
+    await _db!.insert('run_result', {
       'run_id': runId,
       'child_id': childId,
       'time_ms': timeMs,
@@ -97,50 +150,30 @@ class DatabaseService {
 
   static Future<List<Map<String, dynamic>>> getTodayResults(int childId) async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
-
-    // 今日のセッションIDを取得
-    final todaySessionIds = _sessions
-        .where((s) => s['date'] == today)
-        .map((s) => s['id'] as int)
-        .toSet();
-
-    // 今日のランを取得
-    final todayRunIds = _runs
-        .where((r) =>
-            todaySessionIds.contains(r['session_id']) &&
-            r['status'] == 'done')
-        .map((r) => r['id'] as int)
-        .toSet();
-
-    // 該当する結果を取得
-    final results = _runResults
-        .where((rr) =>
-            todayRunIds.contains(rr['run_id']) &&
-            rr['child_id'] == childId)
-        .toList();
-
-    return results;
+    return await _db!.rawQuery('''
+      SELECT rr.* FROM run_result rr
+      INNER JOIN run r ON rr.run_id = r.id
+      INNER JOIN session s ON r.session_id = s.id
+      WHERE s.date = ? AND rr.child_id = ? AND r.status = 'done'
+      ORDER BY rr.id ASC
+    ''', [today, childId]);
   }
 
   static Future<void> deleteRunResult(int runResultId) async {
-    _runResults.removeWhere((rr) => rr['id'] == runResultId);
+    await _db!.delete('run_result', where: 'id = ?', whereArgs: [runResultId]);
   }
 
   static Future<int?> getAllTimeBest(int childId) async {
-    final doneRunIds = _runs
-        .where((r) => r['status'] == 'done')
-        .map((r) => r['id'] as int)
-        .toSet();
+    final results = await _db!.rawQuery('''
+      SELECT MIN(rr.time_ms) as best FROM run_result rr
+      INNER JOIN run r ON rr.run_id = r.id
+      WHERE rr.child_id = ? AND r.status = 'done'
+    ''', [childId]);
 
-    final times = _runResults
-        .where((rr) =>
-            doneRunIds.contains(rr['run_id']) &&
-            rr['child_id'] == childId)
-        .map((rr) => rr['time_ms'] as int)
-        .toList();
-
-    if (times.isEmpty) return null;
-    return times.reduce((a, b) => a < b ? a : b);
+    if (results.isNotEmpty && results.first['best'] != null) {
+      return results.first['best'] as int;
+    }
+    return null;
   }
 
   // --- コース関連 ---
@@ -156,28 +189,13 @@ class DatabaseService {
   }) async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
 
-    // 今日のコースがあれば更新
-    for (int i = 0; i < _courses.length; i++) {
-      if (_courses[i]['date'] == today) {
-        _courses[i] = {
-          ..._courses[i],
-          'name': name,
-          'length_m': lengthM,
-          'first_straight_m': firstStraightM,
-          'curve_count': curveCount,
-          'surface': surface,
-          'weather': weather,
-          'note': note,
-        };
-        return _courses[i]['id'] as int;
-      }
-    }
+    final existing = await _db!.query(
+      'course',
+      where: 'date = ?',
+      whereArgs: [today],
+    );
 
-    // なければ新規作成
-    final id = _nextCourseId++;
-    _courses.add({
-      'id': id,
-      'date': today,
+    final data = {
       'name': name,
       'length_m': lengthM,
       'first_straight_m': firstStraightM,
@@ -185,16 +203,29 @@ class DatabaseService {
       'surface': surface,
       'weather': weather,
       'note': note,
+    };
+
+    // 今日のコースがあれば更新
+    if (existing.isNotEmpty) {
+      await _db!.update('course', data, where: 'date = ?', whereArgs: [today]);
+      return existing.first['id'] as int;
+    }
+
+    // なければ新規作成
+    return await _db!.insert('course', {
+      ...data,
+      'date': today,
       'created_at': DateTime.now().toIso8601String(),
     });
-    return id;
   }
 
   static Future<Map<String, dynamic>?> getTodayCourse() async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
-    for (final course in _courses) {
-      if (course['date'] == today) return course;
-    }
-    return null;
+    final results = await _db!.query(
+      'course',
+      where: 'date = ?',
+      whereArgs: [today],
+    );
+    return results.isNotEmpty ? results.first : null;
   }
 }
