@@ -30,6 +30,15 @@ class DatabaseService {
     return List.from(_children)..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
   }
 
+  static Future<void> updateChildName(int id, String newName) async {
+    for (int i = 0; i < _children.length; i++) {
+      if (_children[i]['id'] == id) {
+        _children[i] = {..._children[i], 'name': newName};
+        break;
+      }
+    }
+  }
+
   static Future<void> deleteChild(int id) async {
     _children.removeWhere((c) => c['id'] == id);
   }

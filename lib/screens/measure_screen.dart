@@ -347,23 +347,43 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('練習する子どもを選択'),
+        title: const Text('子どもを選ぶ'),
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ..._children.map((child) => ListTile(
-                title: Text(child['name'] as String),
-                selected: child['id'] == _currentChildId,
-                onTap: () {
-                  setState(() {
-                    _currentChildId = child['id'] as int;
-                    _currentChildName = child['name'] as String;
-                  });
-                  Navigator.pop(context);
-                },
-              )),
+              ..._children.map((child) {
+                final childId = child['id'] as int;
+                final childName = child['name'] as String;
+                return ListTile(
+                  title: Text(childName),
+                  selected: childId == _currentChildId,
+                  trailing: PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    onSelected: (action) async {
+                      if (action == 'edit') {
+                        Navigator.pop(context);
+                        await _showEditChildDialog(childId, childName);
+                      } else if (action == 'delete') {
+                        Navigator.pop(context);
+                        await _showDeleteChildDialog(childId, childName);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'edit', child: Text('名前を変更')),
+                      const PopupMenuItem(value: 'delete', child: Text('削除', style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _currentChildId = childId;
+                      _currentChildName = childName;
+                    });
+                    Navigator.pop(context);
+                  },
+                );
+              }),
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.add),
@@ -378,6 +398,71 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
         ),
       ),
     );
+  }
+
+  /// 子どもの名前変更ダイアログ
+  Future<void> _showEditChildDialog(int childId, String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('名前を変更'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('変更'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.trim().isNotEmpty) {
+      await DatabaseService.updateChildName(childId, result.trim());
+      await _loadChildren();
+      if (_currentChildId == childId) {
+        setState(() => _currentChildName = result.trim());
+      }
+    }
+  }
+
+  /// 子どもの削除確認ダイアログ
+  Future<void> _showDeleteChildDialog(int childId, String childName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('削除の確認'),
+        content: Text('$childName を削除しますか？\n記録データも見られなくなります。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await DatabaseService.deleteChild(childId);
+      await _loadChildren();
+      if (_currentChildId == childId) {
+        setState(() {
+          _currentChildId = _children.isNotEmpty ? _children.first['id'] as int : null;
+          _currentChildName = _children.isNotEmpty ? _children.first['name'] as String : '未選択';
+        });
+      }
+    }
   }
 
   /// 子ども追加ダイアログ
@@ -490,8 +575,8 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        '練習対象: $_currentChildName',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        _currentChildName,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton(
