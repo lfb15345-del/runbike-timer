@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:audioplayers/audioplayers.dart';
 import 'screens/measure_screen.dart';
 import 'screens/practice_screen.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/course_screen.dart';
 import 'services/database_service.dart';
+import 'services/web_audio_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,26 +37,17 @@ class WebAudioUnlockScreen extends StatelessWidget {
   const WebAudioUnlockScreen({super.key});
 
   Future<void> _unlockAudio(BuildContext context) async {
-    // ユーザータップのコンテキスト内で全音声ファイルをプリロード＆再生テスト
-    // → ブラウザの音声コンテキストを確実に解禁
-    final soundFiles = [
-      'sounds/tick.wav',
-      'sounds/whistle.wav',
-      'sounds/upbeat.wav',
-      'sounds/start02.mp3',
-    ];
+    // ユーザータップで音声コンテキスト解禁
+    // index.html の unlockAudio() が click イベントで自動実行される
 
-    for (final file in soundFiles) {
-      try {
-        final p = AudioPlayer();
-        await p.setSource(AssetSource(file));
-        // 一瞬だけ再生して音声コンテキストを解禁
-        await p.play(AssetSource(file));
-        await Future.delayed(const Duration(milliseconds: 50));
-        await p.stop();
-        p.dispose();
-      } catch (_) {}
-    }
+    // 全スタート音MP3をWeb Audio APIでプリデコード
+    // → 以降の再生はレイテンシーほぼゼロ
+    WebAudioService.preloadSound('start01.mp3');
+    WebAudioService.preloadSound('start02.mp3');
+    WebAudioService.preloadSound('start03.mp3');
+
+    // 少し待ってからホーム画面へ（プリロード開始を確実にする）
+    await Future.delayed(const Duration(milliseconds: 500));
 
     // ホーム画面へ遷移（戻れないように置換）
     if (context.mounted) {

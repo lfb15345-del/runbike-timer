@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/database_service.dart';
+import '../services/web_audio_service.dart';
 
 /// タイマーの状態
 enum TimerState { waiting, countdown, measuring }
@@ -76,13 +77,25 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     _preloadSounds();
   }
 
-  /// 音声ファイルをプリロード（Web版の初回遅延を軽減）
+  /// 音声ファイルをプリロード
   Future<void> _preloadSounds() async {
-    for (final file in _soundFiles.values) {
-      if (file != null) {
-        try {
-          await _audioPlayer.setSource(AssetSource(file));
-        } catch (_) {}
+    if (kIsWeb) {
+      // Web版: Web Audio API でプリロード済み（unlock画面で実行）
+      // 念のためここでも呼ぶ
+      for (final file in _soundFiles.values) {
+        if (file != null) {
+          final filename = file.replaceFirst('sounds/', '');
+          WebAudioService.preloadSound(filename);
+        }
+      }
+    } else {
+      // ネイティブ版: audioplayers でプリロード
+      for (final file in _soundFiles.values) {
+        if (file != null) {
+          try {
+            await _audioPlayer.setSource(AssetSource(file));
+          } catch (_) {}
+        }
       }
     }
   }
@@ -233,23 +246,11 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
     if (soundFile != null) {
       if (kIsWeb) {
-        // === Web版: 実際の再生開始を検知して同期 ===
-        final completer = Completer<DateTime>();
-        late final StreamSubscription sub;
-        sub = _audioPlayer.onPlayerStateChanged.listen((state) {
-          if (state == PlayerState.playing && !completer.isCompleted) {
-            completer.complete(DateTime.now());
-            sub.cancel();
-          }
-        });
-
-        _audioPlayer.play(AssetSource(soundFile));
-
-        // 再生開始を待つ（最大2秒）
-        final actualPlayStart = await completer.future
-            .timeout(const Duration(seconds: 2), onTimeout: () => DateTime.now());
-
-        measureStart = actualPlayStart.add(Duration(milliseconds: offset));
+        // === Web版: Web Audio API で即時再生（レイテンシーほぼゼロ） ===
+        final filename = soundFile.replaceFirst('sounds/', '');
+        final playStartTime = DateTime.now();
+        WebAudioService.playSoundBuffer(filename);
+        measureStart = playStartTime.add(Duration(milliseconds: offset));
       } else {
         // === ネイティブ版: 従来通り即座に再生 ===
         final playStartTime = DateTime.now();
@@ -284,7 +285,11 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
   /// 中止ボタン
   void _onCancel() {
-    _audioPlayer.stop();
+    if (kIsWeb) {
+      WebAudioService.stopAll();
+    } else {
+      _audioPlayer.stop();
+    }
     _timer?.cancel();
 
     // 録画中なら停止

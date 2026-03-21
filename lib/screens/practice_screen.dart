@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
+import '../services/web_audio_service.dart';
 
 /// インターバル練習の状態
 enum PracticePhase { idle, countdown, sprint, rest, finished }
@@ -64,15 +65,19 @@ class _PracticeScreenState extends State<PracticeScreen>
     _preloadSounds();
   }
 
-  /// 音声ファイルをプリロード（Web版の初回遅延を軽減）
+  /// 音声ファイルをプリロード
   Future<void> _preloadSounds() async {
-    try {
-      await _startPlayer.setSource(AssetSource(_startSound));
-      await _whistlePlayer.setSource(AssetSource(_whistleSound));
-      if (_bgmType == 'upbeat') {
-        await _bgmPlayer.setSource(AssetSource('sounds/upbeat.wav'));
-      }
-    } catch (_) {}
+    if (kIsWeb) {
+      // Web版: Web Audio APIでプリロード済み（main.dart の unlock画面で実行）
+      // 念のためここでも呼ぶ
+      WebAudioService.preloadSound('start02.mp3');
+    } else {
+      // ネイティブ版: audioplayers でプリロード
+      try {
+        await _startPlayer.setSource(AssetSource(_startSound));
+        await _whistlePlayer.setSource(AssetSource(_whistleSound));
+      } catch (_) {}
+    }
   }
 
   @override
@@ -113,33 +118,22 @@ class _PracticeScreenState extends State<PracticeScreen>
       PracticeScreen.isRunning = true;
     });
 
-    await _startPlayer.stop();
-
-    final DateTime actualPlayStart;
+    final DateTime playStartTime;
 
     if (kIsWeb) {
-      // === Web版: 実際の再生開始を検知して同期 ===
-      final completer = Completer<DateTime>();
-      late final StreamSubscription sub;
-      sub = _startPlayer.onPlayerStateChanged.listen((state) {
-        if (state == PlayerState.playing && !completer.isCompleted) {
-          completer.complete(DateTime.now());
-          sub.cancel();
-        }
-      });
-
-      await _startPlayer.play(AssetSource(_startSound));
-
-      actualPlayStart = await completer.future
-          .timeout(const Duration(seconds: 2), onTimeout: () => DateTime.now());
+      // === Web版: Web Audio API で即時再生（レイテンシーほぼゼロ） ===
+      WebAudioService.playSoundBuffer('start02.mp3');
+      playStartTime = DateTime.now();
     } else {
-      // === ネイティブ版: 従来通り ===
-      actualPlayStart = DateTime.now();
+      // === ネイティブ版: audioplayers で再生 ===
+      playStartTime = DateTime.now();
+      await _startPlayer.stop();
       await _startPlayer.play(AssetSource(_startSound));
     }
 
+    // スタート音のオフセット後にGO!
     final measureStart =
-        actualPlayStart.add(const Duration(milliseconds: _startOffset));
+        playStartTime.add(const Duration(milliseconds: _startOffset));
 
     final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
     if (waitMs > 0) {
@@ -156,26 +150,39 @@ class _PracticeScreenState extends State<PracticeScreen>
   /// BGMを開始（走行フェーズ開始時に呼ぶ）
   void _startBgm() {
     _stopBgm();
-    if (_bgmType == 'metronome') {
-      // メトロノーム: BPMに合わせてクリック音を繰り返す
-      final intervalMs = (60000 / _metronomeBpm).round();
-      _tickPlayer.play(AssetSource('sounds/tick.wav'));
-      _metronomeTimer = Timer.periodic(
-        Duration(milliseconds: intervalMs),
-        (_) => _tickPlayer.play(AssetSource('sounds/tick.wav')),
-      );
-    } else if (_bgmType == 'upbeat') {
-      _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-      _bgmPlayer.play(AssetSource('sounds/upbeat.wav'));
+    if (kIsWeb) {
+      // === Web版: JavaScript Web Audio API で生成 ===
+      if (_bgmType == 'metronome') {
+        WebAudioService.startMetronome(_metronomeBpm);
+      } else if (_bgmType == 'upbeat') {
+        WebAudioService.startUpbeat();
+      }
+    } else {
+      // === ネイティブ版: audioplayers ===
+      if (_bgmType == 'metronome') {
+        final intervalMs = (60000 / _metronomeBpm).round();
+        _tickPlayer.play(AssetSource('sounds/tick.wav'));
+        _metronomeTimer = Timer.periodic(
+          Duration(milliseconds: intervalMs),
+          (_) => _tickPlayer.play(AssetSource('sounds/tick.wav')),
+        );
+      } else if (_bgmType == 'upbeat') {
+        _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+        _bgmPlayer.play(AssetSource('sounds/upbeat.wav'));
+      }
     }
   }
 
   /// BGMを停止
   void _stopBgm() {
-    _metronomeTimer?.cancel();
-    _metronomeTimer = null;
-    _bgmPlayer.stop();
-    _tickPlayer.stop();
+    if (kIsWeb) {
+      WebAudioService.stopAll();
+    } else {
+      _metronomeTimer?.cancel();
+      _metronomeTimer = null;
+      _bgmPlayer.stop();
+      _tickPlayer.stop();
+    }
   }
 
   void _startSprint() {
@@ -195,7 +202,11 @@ class _PracticeScreenState extends State<PracticeScreen>
   void _startRest() {
     // BGM停止 → ホイッスル音
     _stopBgm();
-    _whistlePlayer.play(AssetSource(_whistleSound));
+    if (kIsWeb) {
+      WebAudioService.playWhistle();
+    } else {
+      _whistlePlayer.play(AssetSource(_whistleSound));
+    }
     HapticFeedback.mediumImpact();
 
     setState(() {
@@ -204,29 +215,22 @@ class _PracticeScreenState extends State<PracticeScreen>
     });
     _startCountdownTimer();
 
-    // 休憩の最後にスタート音を再生
+    // 休憩の最後にスタート音を再生（次ラウンドのカウントダウン）
     if (_currentRound < _totalRounds) {
-      if (kIsWeb) {
-        // Web版: 再生開始遅延を考慮して少し早めに開始
-        final soundDelay = (_restSec * 1000) - _startOffset - 300;
-        if (soundDelay > 0) {
-          Future.delayed(Duration(milliseconds: soundDelay), () async {
-            if (_phase == PracticePhase.rest) {
+      final soundDelay = (_restSec * 1000) - _startOffset;
+      if (soundDelay > 0) {
+        Future.delayed(Duration(milliseconds: soundDelay), () async {
+          if (_phase == PracticePhase.rest) {
+            if (kIsWeb) {
+              // Web版: Web Audio API で即時再生
+              WebAudioService.playSoundBuffer('start02.mp3');
+            } else {
+              // ネイティブ版: audioplayers で再生
               await _startPlayer.stop();
               await _startPlayer.play(AssetSource(_startSound));
             }
-          });
-        }
-      } else {
-        final soundDelay = (_restSec * 1000) - _startOffset;
-        if (soundDelay > 0) {
-          Future.delayed(Duration(milliseconds: soundDelay), () async {
-            if (_phase == PracticePhase.rest) {
-              await _startPlayer.stop();
-              await _startPlayer.play(AssetSource(_startSound));
-            }
-          });
-        }
+          }
+        });
       }
     }
   }
@@ -268,7 +272,11 @@ class _PracticeScreenState extends State<PracticeScreen>
   void _onFinished() {
     _timer?.cancel();
     _stopBgm();
-    _whistlePlayer.play(AssetSource(_whistleSound));
+    if (kIsWeb) {
+      WebAudioService.playWhistle();
+    } else {
+      _whistlePlayer.play(AssetSource(_whistleSound));
+    }
     HapticFeedback.heavyImpact();
     _pulseController.stop();
     _pulseController.reset();
@@ -282,7 +290,11 @@ class _PracticeScreenState extends State<PracticeScreen>
   void _onCancel() {
     _timer?.cancel();
     _stopBgm();
-    _startPlayer.stop();
+    if (kIsWeb) {
+      WebAudioService.stopAll(); // スタート音含め全停止
+    } else {
+      _startPlayer.stop();
+    }
     _pulseController.stop();
     _pulseController.reset();
     setState(() {
