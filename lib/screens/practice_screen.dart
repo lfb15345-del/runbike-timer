@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -60,6 +61,18 @@ class _PracticeScreenState extends State<PracticeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
+    _preloadSounds();
+  }
+
+  /// 音声ファイルをプリロード（Web版の初回遅延を軽減）
+  Future<void> _preloadSounds() async {
+    try {
+      await _startPlayer.setSource(AssetSource(_startSound));
+      await _whistlePlayer.setSource(AssetSource(_whistleSound));
+      if (_bgmType == 'upbeat') {
+        await _bgmPlayer.setSource(AssetSource('sounds/upbeat.wav'));
+      }
+    } catch (_) {}
   }
 
   @override
@@ -100,11 +113,33 @@ class _PracticeScreenState extends State<PracticeScreen>
       PracticeScreen.isRunning = true;
     });
 
-    final playStart = DateTime.now();
     await _startPlayer.stop();
-    await _startPlayer.play(AssetSource(_startSound));
+
+    final DateTime actualPlayStart;
+
+    if (kIsWeb) {
+      // === Web版: 実際の再生開始を検知して同期 ===
+      final completer = Completer<DateTime>();
+      late final StreamSubscription sub;
+      sub = _startPlayer.onPlayerStateChanged.listen((state) {
+        if (state == PlayerState.playing && !completer.isCompleted) {
+          completer.complete(DateTime.now());
+          sub.cancel();
+        }
+      });
+
+      await _startPlayer.play(AssetSource(_startSound));
+
+      actualPlayStart = await completer.future
+          .timeout(const Duration(seconds: 2), onTimeout: () => DateTime.now());
+    } else {
+      // === ネイティブ版: 従来通り ===
+      actualPlayStart = DateTime.now();
+      await _startPlayer.play(AssetSource(_startSound));
+    }
+
     final measureStart =
-        playStart.add(const Duration(milliseconds: _startOffset));
+        actualPlayStart.add(const Duration(milliseconds: _startOffset));
 
     final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
     if (waitMs > 0) {
@@ -171,14 +206,27 @@ class _PracticeScreenState extends State<PracticeScreen>
 
     // 休憩の最後にスタート音を再生
     if (_currentRound < _totalRounds) {
-      final soundDelay = (_restSec * 1000) - _startOffset;
-      if (soundDelay > 0) {
-        Future.delayed(Duration(milliseconds: soundDelay), () async {
-          if (_phase == PracticePhase.rest) {
-            await _startPlayer.stop();
-            await _startPlayer.play(AssetSource(_startSound));
-          }
-        });
+      if (kIsWeb) {
+        // Web版: 再生開始遅延を考慮して少し早めに開始
+        final soundDelay = (_restSec * 1000) - _startOffset - 300;
+        if (soundDelay > 0) {
+          Future.delayed(Duration(milliseconds: soundDelay), () async {
+            if (_phase == PracticePhase.rest) {
+              await _startPlayer.stop();
+              await _startPlayer.play(AssetSource(_startSound));
+            }
+          });
+        }
+      } else {
+        final soundDelay = (_restSec * 1000) - _startOffset;
+        if (soundDelay > 0) {
+          Future.delayed(Duration(milliseconds: soundDelay), () async {
+            if (_phase == PracticePhase.rest) {
+              await _startPlayer.stop();
+              await _startPlayer.play(AssetSource(_startSound));
+            }
+          });
+        }
       }
     }
   }

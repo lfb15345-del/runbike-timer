@@ -73,6 +73,18 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     WidgetsBinding.instance.addObserver(this);
     _loadChildren();
     _initCameras();
+    _preloadSounds();
+  }
+
+  /// 音声ファイルをプリロード（Web版の初回遅延を軽減）
+  Future<void> _preloadSounds() async {
+    for (final file in _soundFiles.values) {
+      if (file != null) {
+        try {
+          await _audioPlayer.setSource(AssetSource(file));
+        } catch (_) {}
+      }
+    }
   }
 
   @override
@@ -220,9 +232,30 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     final DateTime measureStart;
 
     if (soundFile != null) {
-      final playStartTime = DateTime.now();
-      _audioPlayer.play(AssetSource(soundFile));
-      measureStart = playStartTime.add(Duration(milliseconds: offset));
+      if (kIsWeb) {
+        // === Web版: 実際の再生開始を検知して同期 ===
+        final completer = Completer<DateTime>();
+        late final StreamSubscription sub;
+        sub = _audioPlayer.onPlayerStateChanged.listen((state) {
+          if (state == PlayerState.playing && !completer.isCompleted) {
+            completer.complete(DateTime.now());
+            sub.cancel();
+          }
+        });
+
+        _audioPlayer.play(AssetSource(soundFile));
+
+        // 再生開始を待つ（最大2秒）
+        final actualPlayStart = await completer.future
+            .timeout(const Duration(seconds: 2), onTimeout: () => DateTime.now());
+
+        measureStart = actualPlayStart.add(Duration(milliseconds: offset));
+      } else {
+        // === ネイティブ版: 従来通り即座に再生 ===
+        final playStartTime = DateTime.now();
+        _audioPlayer.play(AssetSource(soundFile));
+        measureStart = playStartTime.add(Duration(milliseconds: offset));
+      }
 
       final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
       if (waitMs > 0) {
