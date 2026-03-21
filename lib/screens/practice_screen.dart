@@ -24,7 +24,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   // --- BGM設定 ---
   String _bgmType = 'none'; // none, metronome, upbeat
-  int _metronomeBpm = 140;
+  int _metronomeBpm = 180;
   Timer? _metronomeTimer;
 
   // --- 状態管理 ---
@@ -33,14 +33,14 @@ class _PracticeScreenState extends State<PracticeScreen>
   int _remainingMs = 0;
   Timer? _timer;
 
-  // --- 音声 ---
+  // --- 音声（各用途で独立したプレイヤー） ---
   final AudioPlayer _startPlayer = AudioPlayer();
-  final AudioPlayer _bellPlayer = AudioPlayer();
+  final AudioPlayer _whistlePlayer = AudioPlayer();
   final AudioPlayer _bgmPlayer = AudioPlayer();
   final AudioPlayer _tickPlayer = AudioPlayer();
   static const int _startOffset = 10600;
   static const String _startSound = 'sounds/start02.mp3';
-  static const String _bellSound = 'sounds/bell.wav';
+  static const String _whistleSound = 'sounds/whistle.wav';
 
   // --- アニメーション ---
   late AnimationController _speedLineController;
@@ -64,7 +64,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     _timer?.cancel();
     _metronomeTimer?.cancel();
     _startPlayer.dispose();
-    _bellPlayer.dispose();
+    _whistlePlayer.dispose();
     _bgmPlayer.dispose();
     _tickPlayer.dispose();
     _speedLineController.dispose();
@@ -97,6 +97,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     });
 
     final playStart = DateTime.now();
+    await _startPlayer.stop();
     await _startPlayer.play(AssetSource(_startSound));
     final measureStart =
         playStart.add(const Duration(milliseconds: _startOffset));
@@ -144,14 +145,18 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.sprint;
       _remainingMs = _sprintSec * 1000;
     });
-    _startBgm();
+    // ホイッスル音の後にBGM開始（ぶつ切り防止）
+    _whistlePlayer.play(AssetSource(_whistleSound));
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (_phase == PracticePhase.sprint) _startBgm();
+    });
     _startCountdownTimer();
   }
 
   void _startRest() {
-    // カンカン音 & BGM停止
+    // BGM停止 → ホイッスル音
     _stopBgm();
-    _bellPlayer.play(AssetSource(_bellSound));
+    _whistlePlayer.play(AssetSource(_whistleSound));
     HapticFeedback.mediumImpact();
 
     setState(() {
@@ -164,9 +169,10 @@ class _PracticeScreenState extends State<PracticeScreen>
     if (_currentRound < _totalRounds) {
       final soundDelay = (_restSec * 1000) - _startOffset;
       if (soundDelay > 0) {
-        Future.delayed(Duration(milliseconds: soundDelay), () {
+        Future.delayed(Duration(milliseconds: soundDelay), () async {
           if (_phase == PracticePhase.rest) {
-            _startPlayer.play(AssetSource(_startSound));
+            await _startPlayer.stop();
+            await _startPlayer.play(AssetSource(_startSound));
           }
         });
       }
@@ -210,7 +216,7 @@ class _PracticeScreenState extends State<PracticeScreen>
   void _onFinished() {
     _timer?.cancel();
     _stopBgm();
-    _bellPlayer.play(AssetSource(_bellSound));
+    _whistlePlayer.play(AssetSource(_whistleSound));
     HapticFeedback.heavyImpact();
     _pulseController.stop();
     _pulseController.reset();
@@ -342,9 +348,9 @@ class _PracticeScreenState extends State<PracticeScreen>
                 Expanded(
                   child: Slider(
                     value: _metronomeBpm.toDouble(),
-                    min: 80,
-                    max: 200,
-                    divisions: 24,
+                    min: 150,
+                    max: 300,
+                    divisions: 30,
                     label: '$_metronomeBpm',
                     onChanged: (v) => setState(() => _metronomeBpm = v.round()),
                   ),
