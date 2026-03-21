@@ -230,6 +230,188 @@
       stopUpbeat();
       stopSoundBuffer();
     }
+
+    // =============================================
+    //  カメラ（プレビュー + 録画 + ダウンロード保存）
+    // =============================================
+    var _cameraStream = null;
+    var _mediaRecorder = null;
+    var _recordedChunks = [];
+    var _cameraVideo = null;
+    var _cameraFacing = 'environment'; // environment=背面, user=前面
+
+    // カメラプレビュー開始（画面右上にPiP表示）
+    async function startCameraPreview() {
+      try {
+        // 既存プレビューがあれば停止
+        stopCameraPreview();
+
+        _cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: _cameraFacing },
+          audio: true
+        });
+
+        _cameraVideo = document.createElement('video');
+        _cameraVideo.srcObject = _cameraStream;
+        _cameraVideo.autoplay = true;
+        _cameraVideo.muted = true;
+        _cameraVideo.playsInline = true;
+        _cameraVideo.style.cssText =
+          'position:fixed;top:8px;right:8px;width:120px;height:160px;' +
+          'border-radius:12px;border:2px solid white;z-index:9999;' +
+          'object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.3);' +
+          'cursor:pointer;';
+
+        // タップで前面/背面切替
+        _cameraVideo.addEventListener('click', function() {
+          switchCamera();
+        });
+
+        document.body.appendChild(_cameraVideo);
+        console.log('[Camera] Preview started');
+        return true;
+      } catch(e) {
+        console.error('[Camera] Preview failed:', e);
+        return false;
+      }
+    }
+
+    // カメラプレビュー停止
+    function stopCameraPreview() {
+      if (_cameraVideo) {
+        _cameraVideo.remove();
+        _cameraVideo = null;
+      }
+      if (_cameraStream) {
+        _cameraStream.getTracks().forEach(function(t) { t.stop(); });
+        _cameraStream = null;
+      }
+      _mediaRecorder = null;
+      _recordedChunks = [];
+    }
+
+    // 前面/背面カメラ切替
+    async function switchCamera() {
+      var wasRecording = _mediaRecorder && _mediaRecorder.state === 'recording';
+      _cameraFacing = (_cameraFacing === 'environment') ? 'user' : 'environment';
+
+      // ストリームを取り直す
+      try {
+        var newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: _cameraFacing },
+          audio: true
+        });
+
+        // 古いストリームを停止
+        if (_cameraStream) {
+          _cameraStream.getTracks().forEach(function(t) { t.stop(); });
+        }
+        _cameraStream = newStream;
+
+        if (_cameraVideo) {
+          _cameraVideo.srcObject = newStream;
+        }
+
+        // 録画中だった場合は新しいストリームで録画再開
+        if (wasRecording) {
+          startCameraRecording();
+        }
+        console.log('[Camera] Switched to ' + _cameraFacing);
+      } catch(e) {
+        console.error('[Camera] Switch failed:', e);
+      }
+    }
+
+    // 録画開始
+    function startCameraRecording() {
+      if (!_cameraStream) return false;
+      _recordedChunks = [];
+
+      // MIMEタイプの優先順位
+      var mimeType = 'video/webm';
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+        mimeType = 'video/webm;codecs=vp9';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        mimeType = 'video/webm;codecs=vp8';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
+      }
+
+      try {
+        _mediaRecorder = new MediaRecorder(_cameraStream, { mimeType: mimeType });
+      } catch(e) {
+        // フォールバック: MIMEタイプ指定なし
+        _mediaRecorder = new MediaRecorder(_cameraStream);
+      }
+
+      _mediaRecorder.ondataavailable = function(e) {
+        if (e.data.size > 0) _recordedChunks.push(e.data);
+      };
+      _mediaRecorder.start(1000); // 1秒ごとにチャンク
+
+      // プレビュー枠を赤に
+      if (_cameraVideo) {
+        _cameraVideo.style.border = '3px solid red';
+      }
+      console.log('[Camera] Recording started (' + mimeType + ')');
+      return true;
+    }
+
+    // 録画停止 → 自動ダウンロード
+    function stopCameraRecording() {
+      return new Promise(function(resolve) {
+        if (!_mediaRecorder || _mediaRecorder.state === 'inactive') {
+          resolve(false);
+          return;
+        }
+
+        _mediaRecorder.onstop = function() {
+          // Blobを作成
+          var mimeType = _mediaRecorder.mimeType || 'video/webm';
+          var ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          var blob = new Blob(_recordedChunks, { type: mimeType });
+          var url = URL.createObjectURL(blob);
+
+          // ダウンロードリンクを生成してクリック
+          var a = document.createElement('a');
+          a.href = url;
+          var now = new Date();
+          var dateStr = now.getFullYear() +
+            ('0'+(now.getMonth()+1)).slice(-2) +
+            ('0'+now.getDate()).slice(-2) + '_' +
+            ('0'+now.getHours()).slice(-2) +
+            ('0'+now.getMinutes()).slice(-2) +
+            ('0'+now.getSeconds()).slice(-2);
+          a.download = 'runbike_' + dateStr + '.' + ext;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+
+          // クリーンアップ
+          setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
+          _recordedChunks = [];
+
+          // プレビュー枠を白に戻す
+          if (_cameraVideo) {
+            _cameraVideo.style.border = '2px solid white';
+          }
+          console.log('[Camera] Recording saved: ' + a.download);
+          resolve(true);
+        };
+
+        _mediaRecorder.stop();
+      });
+    }
+
+    // カメラが利用可能か確認
+    function isCameraAvailable() {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    }
+
+    // 録画中かどうか
+    function isCameraRecording() {
+      return _mediaRecorder && _mediaRecorder.state === 'recording';
+    }
   </script>
 </body>
 </html>

@@ -6,6 +6,7 @@ import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/database_service.dart';
 import '../services/web_audio_service.dart';
+import '../services/web_camera_service.dart';
 
 /// タイマーの状態
 enum TimerState { waiting, countdown, measuring }
@@ -126,7 +127,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
   /// カメラ一覧を取得
   Future<void> _initCameras() async {
-    if (kIsWeb) return; // Web版ではカメラ無効
+    if (kIsWeb) return; // Web版はWebCameraServiceを使う（JS経由）
     try {
       _cameras = await availableCameras();
     } catch (e) {
@@ -238,8 +239,13 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     });
 
     // 録画ONなら録画開始
-    if (_isRecordingEnabled && _isCameraInitialized) {
-      await _startVideoRecording();
+    if (_isRecordingEnabled) {
+      if (kIsWeb) {
+        WebCameraService.startRecording();
+        setState(() => _isVideoRecording = true);
+      } else if (_isCameraInitialized) {
+        await _startVideoRecording();
+      }
     }
 
     final DateTime measureStart;
@@ -294,7 +300,14 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
     // 録画中なら停止
     if (_isVideoRecording) {
-      _stopVideoRecording();
+      if (kIsWeb) {
+        // Web版: 録画停止 → 自動ダウンロード
+        WebCameraService.stopRecording().then((_) {
+          _showMessage('録画をダウンロードしました');
+        });
+      } else {
+        _stopVideoRecording();
+      }
     }
 
     setState(() {
@@ -302,6 +315,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
       MeasureScreen.isRunning = false;
       _elapsedMs = 0;
       _measureStartTime = null;
+      _isVideoRecording = false;
       _teamFinished.clear();
     });
   }
@@ -313,7 +327,13 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
     // 録画中なら停止
     if (_isVideoRecording) {
-      await _stopVideoRecording();
+      if (kIsWeb) {
+        await WebCameraService.stopRecording();
+        _showMessage('録画をダウンロードしました');
+      } else {
+        await _stopVideoRecording();
+      }
+      setState(() => _isVideoRecording = false);
     }
 
     setState(() {
@@ -375,10 +395,21 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   /// 録画スイッチのON/OFF
   Future<void> _toggleRecording(bool value) async {
     if (kIsWeb) {
-      _showMessage('Web版では録画機能は使えません');
+      // === Web版: JS経由でカメラ起動 ===
+      setState(() => _isRecordingEnabled = value);
+      if (value) {
+        final ok = await WebCameraService.startPreview();
+        if (!ok) {
+          _showMessage('カメラを起動できませんでした');
+          setState(() => _isRecordingEnabled = false);
+        }
+      } else {
+        WebCameraService.stopPreview();
+      }
       return;
     }
 
+    // === ネイティブ版: camera パッケージ ===
     setState(() => _isRecordingEnabled = value);
 
     if (value) {
@@ -871,8 +902,9 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
               ),
             ),
 
-            // --- カメラプレビュー（ワイプ） ---
-            if (_isRecordingEnabled && _isCameraInitialized)
+            // --- カメラプレビュー（ワイプ）ネイティブ版のみ ---
+            // Web版はJS側でHTMLビデオ要素をフローティング表示
+            if (!kIsWeb && _isRecordingEnabled && _isCameraInitialized)
               _buildCameraPreview(),
           ],
         ),
