@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 /// インターバル練習の状態
@@ -29,24 +30,25 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   // --- 音声 ---
   final AudioPlayer _startPlayer = AudioPlayer();
-  static const int _startOffset = 10600; // start02.mp3 のオフセット
+  final AudioPlayer _bellPlayer = AudioPlayer();
+  static const int _startOffset = 10600;
   static const String _startSound = 'sounds/start02.mp3';
+  static const String _bellSound = 'sounds/bell.wav';
 
-  // --- スピードラインアニメーション ---
+  // --- アニメーション ---
   late AnimationController _speedLineController;
   late AnimationController _pulseController;
-  final _random = Random();
 
   @override
   void initState() {
     super.initState();
     _speedLineController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 600),
     )..repeat();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
     );
   }
 
@@ -54,6 +56,7 @@ class _PracticeScreenState extends State<PracticeScreen>
   void dispose() {
     _timer?.cancel();
     _startPlayer.dispose();
+    _bellPlayer.dispose();
     _speedLineController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -77,7 +80,6 @@ class _PracticeScreenState extends State<PracticeScreen>
   //  スタート・フェーズ制御
   // ========================================
 
-  /// スタートボタン押下
   Future<void> _onStart() async {
     setState(() {
       _phase = PracticePhase.countdown;
@@ -89,20 +91,17 @@ class _PracticeScreenState extends State<PracticeScreen>
     final measureStart =
         playStart.add(const Duration(milliseconds: _startOffset));
 
-    final waitMs =
-        measureStart.difference(DateTime.now()).inMilliseconds;
+    final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
     if (waitMs > 0) {
       await Future.delayed(Duration(milliseconds: waitMs));
     }
-
-    // カウントダウン中にキャンセルされた場合
     if (_phase != PracticePhase.countdown) return;
-
     _startSprint();
   }
 
-  /// 走りフェーズ開始
   void _startSprint() {
+    // バイブレーション
+    HapticFeedback.heavyImpact();
     setState(() {
       _phase = PracticePhase.sprint;
       _remainingMs = _sprintSec * 1000;
@@ -110,15 +109,18 @@ class _PracticeScreenState extends State<PracticeScreen>
     _startCountdownTimer();
   }
 
-  /// 休憩フェーズ開始
   void _startRest() {
+    // カンカン音を鳴らす
+    _bellPlayer.play(AssetSource(_bellSound));
+    HapticFeedback.mediumImpact();
+
     setState(() {
       _phase = PracticePhase.rest;
       _remainingMs = _restSec * 1000;
     });
     _startCountdownTimer();
 
-    // 休憩の最後にスタート音を再生（次のラウンドのカウントダウン）
+    // 休憩の最後にスタート音を再生
     if (_currentRound < _totalRounds) {
       final soundDelay = (_restSec * 1000) - _startOffset;
       if (soundDelay > 0) {
@@ -131,15 +133,13 @@ class _PracticeScreenState extends State<PracticeScreen>
     }
   }
 
-  /// カウントダウンタイマーを開始
   void _startCountdownTimer() {
     _timer?.cancel();
     final startTime = DateTime.now();
     final initialRemaining = _remainingMs;
 
     _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      final elapsed =
-          DateTime.now().difference(startTime).inMilliseconds;
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
       final remaining = initialRemaining - elapsed;
 
       if (remaining <= 0) {
@@ -155,7 +155,6 @@ class _PracticeScreenState extends State<PracticeScreen>
           }
         }
       } else {
-        // 残り3秒でパルスアニメーション
         if (remaining <= 3000 && !_pulseController.isAnimating) {
           _pulseController.repeat(reverse: true);
         }
@@ -168,9 +167,10 @@ class _PracticeScreenState extends State<PracticeScreen>
     });
   }
 
-  /// 完了
   void _onFinished() {
     _timer?.cancel();
+    _bellPlayer.play(AssetSource(_bellSound));
+    HapticFeedback.heavyImpact();
     _pulseController.stop();
     _pulseController.reset();
     setState(() {
@@ -179,7 +179,6 @@ class _PracticeScreenState extends State<PracticeScreen>
     });
   }
 
-  /// 中止
   void _onCancel() {
     _timer?.cancel();
     _startPlayer.stop();
@@ -192,7 +191,6 @@ class _PracticeScreenState extends State<PracticeScreen>
     });
   }
 
-  /// リセット
   void _onReset() {
     setState(() {
       _phase = PracticePhase.idle;
@@ -200,10 +198,6 @@ class _PracticeScreenState extends State<PracticeScreen>
       _remainingMs = 0;
     });
   }
-
-  // ========================================
-  //  全体進捗を計算
-  // ========================================
 
   double get _overallProgress {
     if (_phase == PracticePhase.idle ||
@@ -213,10 +207,8 @@ class _PracticeScreenState extends State<PracticeScreen>
     final roundMs = (_sprintSec + _restSec) * 1000;
     final totalMs = roundMs * _totalRounds;
     final completedMs = (_currentRound - 1) * roundMs;
-
     final currentPhaseTotal =
-        (_phase == PracticePhase.sprint ? _sprintSec : _restSec) *
-            1000;
+        (_phase == PracticePhase.sprint ? _sprintSec : _restSec) * 1000;
     final currentPhaseElapsed = currentPhaseTotal - _remainingMs;
     final prevPhaseMs =
         _phase == PracticePhase.rest ? _sprintSec * 1000 : 0;
@@ -236,13 +228,8 @@ class _PracticeScreenState extends State<PracticeScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // --- 設定エリア ---
             if (!isRunning) _buildSettings(),
-
-            // --- メインエリア ---
             Expanded(child: _buildMainArea()),
-
-            // --- ボタンエリア ---
             _buildButtons(),
             const SizedBox(height: 16),
           ],
@@ -251,50 +238,50 @@ class _PracticeScreenState extends State<PracticeScreen>
     );
   }
 
-  /// 設定パネル（待機中のみ表示）
+  /// 設定パネル（コンパクト版）
   Widget _buildSettings() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
       child: Column(
         children: [
           const Text('インターバル練習',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
+          // 3つの設定を横並び（コンパクト）
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _settingControl('走る', _sprintSec, '秒',
+              Expanded(child: _settingControl('走る', _sprintSec, '秒',
                   onMinus: () {
                     if (_sprintSec > 5) setState(() => _sprintSec -= 5);
                   },
                   onPlus: () {
                     if (_sprintSec < 60) setState(() => _sprintSec += 5);
-                  }),
-              _settingControl('休む', _restSec, '秒',
+                  })),
+              Expanded(child: _settingControl('休む', _restSec, '秒',
                   onMinus: () {
                     if (_restSec > 5) setState(() => _restSec -= 5);
                   },
                   onPlus: () {
                     if (_restSec < 120) setState(() => _restSec += 5);
-                  }),
-              _settingControl('回数', _totalRounds, '回',
+                  })),
+              Expanded(child: _settingControl('回数', _totalRounds, '回',
                   onMinus: () {
                     if (_totalRounds > 1) setState(() => _totalRounds--);
                   },
                   onPlus: () {
                     if (_totalRounds < 20) setState(() => _totalRounds++);
-                  }),
+                  })),
             ],
           ),
-          const SizedBox(height: 8),
-          Text('合計: $_totalTimeDisplay',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+          const SizedBox(height: 4),
+          Text('合計 $_totalTimeDisplay',
+              style: TextStyle(fontSize: 15, color: Colors.grey[600])),
         ],
       ),
     );
   }
 
-  /// 設定コントロール（+/- ボタン）
+  /// 設定コントロール（コンパクト版）
   Widget _settingControl(
     String label, int value, String unit, {
     required VoidCallback onMinus,
@@ -302,22 +289,32 @@ class _PracticeScreenState extends State<PracticeScreen>
   }) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+        Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              onPressed: onMinus,
-              icon: const Icon(Icons.remove_circle_outline),
-              iconSize: 28,
+            SizedBox(
+              width: 32, height: 32,
+              child: IconButton(
+                onPressed: onMinus,
+                icon: const Icon(Icons.remove_circle_outline, size: 22),
+                padding: EdgeInsets.zero,
+              ),
             ),
-            Text('$value$unit',
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold)),
-            IconButton(
-              onPressed: onPlus,
-              icon: const Icon(Icons.add_circle_outline),
-              iconSize: 28,
+            SizedBox(
+              width: 48,
+              child: Text('$value$unit',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            SizedBox(
+              width: 32, height: 32,
+              child: IconButton(
+                onPressed: onPlus,
+                icon: const Icon(Icons.add_circle_outline, size: 22),
+                padding: EdgeInsets.zero,
+              ),
             ),
           ],
         ),
@@ -325,202 +322,236 @@ class _PracticeScreenState extends State<PracticeScreen>
     );
   }
 
-  /// メインエリア（フェーズ表示 + スピードライン）
+  /// メインエリア
   Widget _buildMainArea() {
     if (_phase == PracticePhase.idle) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.fitness_center, size: 80, color: Colors.green),
-            SizedBox(height: 16),
-            Text('設定してスタート！',
-                style: TextStyle(fontSize: 18, color: Colors.grey)),
+            Icon(Icons.directions_bike, size: 80,
+                color: Colors.green[400]),
+            const SizedBox(height: 16),
+            Text('設定してスタート',
+                style: TextStyle(fontSize: 18, color: Colors.grey[500])),
           ],
         ),
       );
     }
 
-    return Stack(
-      children: [
-        // スピードラインアニメーション（走りフェーズのみ）
-        if (_phase == PracticePhase.sprint) _buildSpeedLines(),
-
-        // メインコンテンツ
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: _phaseGradient,
+    return ClipRect(
+      child: Stack(
+        children: [
+          // 背景グラデーション
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: _phaseGradient,
+              ),
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // フェーズ名
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  final scale = _remainingMs <= 3000
-                      ? 1.0 + _pulseController.value * 0.15
-                      : 1.0;
-                  return Transform.scale(
-                    scale: scale,
-                    child: Text(
-                      _phaseText,
-                      style: TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w900,
-                        color: _remainingMs <= 3000 &&
-                                _phase != PracticePhase.finished
-                            ? Colors.red
-                            : Colors.white,
-                        shadows: const [
-                          Shadow(
-                            blurRadius: 10,
-                            color: Colors.black54,
-                            offset: Offset(2, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+
+          // 走行中エフェクト（横方向スピードライン）
+          if (_phase == PracticePhase.sprint)
+            AnimatedBuilder(
+              animation: _speedLineController,
+              builder: (context, _) => CustomPaint(
+                size: Size.infinite,
+                painter: _HorizontalSpeedPainter(
+                  progress: _speedLineController.value,
+                ),
               ),
-              const SizedBox(height: 8),
+            ),
 
-              // カウントダウン
-              if (_phase == PracticePhase.sprint ||
-                  _phase == PracticePhase.rest)
-                Text(
-                  _formatRemaining(_remainingMs),
-                  style: TextStyle(
-                    fontSize: 80,
-                    fontWeight: FontWeight.w900,
-                    fontFamily: 'monospace',
-                    color: _remainingMs <= 3000
-                        ? Colors.red
-                        : Colors.white,
-                    shadows: const [
-                      Shadow(
-                        blurRadius: 12,
-                        color: Colors.black45,
-                        offset: Offset(2, 2),
-                      ),
-                    ],
-                  ),
+          // 休憩中エフェクト（ゆっくり漂う光）
+          if (_phase == PracticePhase.rest)
+            AnimatedBuilder(
+              animation: _speedLineController,
+              builder: (context, _) => CustomPaint(
+                size: Size.infinite,
+                painter: _FloatingLightPainter(
+                  progress: _speedLineController.value,
                 ),
+              ),
+            ),
 
-              if (_phase == PracticePhase.finished)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('おつかれさま！',
-                      style: TextStyle(
-                        fontSize: 28,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      )),
+          // メインコンテンツ
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // フェーズ表示
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, child) {
+                    final scale = _remainingMs <= 3000 &&
+                            _phase != PracticePhase.finished &&
+                            _phase != PracticePhase.countdown
+                        ? 1.0 + _pulseController.value * 0.12
+                        : 1.0;
+                    return Transform.scale(
+                      scale: scale,
+                      child: _buildPhaseDisplay(),
+                    );
+                  },
                 ),
+                const SizedBox(height: 4),
 
-              const SizedBox(height: 16),
-
-              // ラウンド表示
-              if (_phase != PracticePhase.finished)
-                Text(
-                  'ラウンド $_currentRound / $_totalRounds',
-                  style: const TextStyle(
-                      fontSize: 20, color: Colors.white70),
-                ),
-
-              const SizedBox(height: 24),
-
-              // 進捗バー
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: _overallProgress,
-                    minHeight: 12,
-                    backgroundColor: Colors.white24,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      _phase == PracticePhase.finished
-                          ? Colors.amber
+                // カウントダウン数字
+                if (_phase == PracticePhase.sprint ||
+                    _phase == PracticePhase.rest)
+                  Text(
+                    _formatRemaining(_remainingMs),
+                    style: TextStyle(
+                      fontSize: 90,
+                      fontWeight: FontWeight.w900,
+                      fontFamily: 'monospace',
+                      color: _remainingMs <= 3000
+                          ? Colors.yellow
                           : Colors.white,
+                      shadows: const [
+                        Shadow(blurRadius: 16, color: Colors.black54,
+                            offset: Offset(2, 3)),
+                      ],
+                    ),
+                  ),
+
+                if (_phase == PracticePhase.finished)
+                  const Text('FINISH!!',
+                      style: TextStyle(fontSize: 56,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 4,
+                          shadows: [
+                            Shadow(blurRadius: 16, color: Colors.black45,
+                                offset: Offset(2, 3)),
+                          ])),
+
+                const SizedBox(height: 20),
+
+                // ラウンド
+                if (_phase != PracticePhase.finished)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'ROUND $_currentRound / $_totalRounds',
+                      style: const TextStyle(
+                          fontSize: 18, color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2),
+                    ),
+                  ),
+
+                const SizedBox(height: 24),
+
+                // 進捗バー
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: _overallProgress,
+                      minHeight: 10,
+                      backgroundColor: Colors.white24,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        _phase == PracticePhase.finished
+                            ? Colors.amber
+                            : Colors.white,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  /// スピードラインアニメーション
-  Widget _buildSpeedLines() {
-    return AnimatedBuilder(
-      animation: _speedLineController,
-      builder: (context, child) {
-        return CustomPaint(
-          size: Size.infinite,
-          painter: _SpeedLinePainter(
-            progress: _speedLineController.value,
-            random: _random,
-          ),
+  /// フェーズ表示ウィジェット
+  Widget _buildPhaseDisplay() {
+    switch (_phase) {
+      case PracticePhase.countdown:
+        return const Text('READY',
+            style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800,
+                color: Colors.white70, letterSpacing: 8,
+                shadows: [Shadow(blurRadius: 10, color: Colors.black38)]));
+      case PracticePhase.sprint:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.local_fire_department,
+                size: 36,
+                color: _remainingMs <= 3000 ? Colors.yellow : Colors.orangeAccent),
+            const SizedBox(width: 8),
+            Text('GO',
+                style: TextStyle(fontSize: 44, fontWeight: FontWeight.w900,
+                    color: _remainingMs <= 3000 ? Colors.yellow : Colors.white,
+                    letterSpacing: 6,
+                    shadows: const [Shadow(blurRadius: 12, color: Colors.black54,
+                        offset: Offset(2, 2))])),
+            const SizedBox(width: 8),
+            Icon(Icons.local_fire_department,
+                size: 36,
+                color: _remainingMs <= 3000 ? Colors.yellow : Colors.orangeAccent),
+          ],
         );
-      },
-    );
+      case PracticePhase.rest:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.air, size: 32, color: Colors.white70),
+            const SizedBox(width: 8),
+            Text('BREAK',
+                style: TextStyle(fontSize: 38, fontWeight: FontWeight.w800,
+                    color: _remainingMs <= 3000 ? Colors.yellow : Colors.white,
+                    letterSpacing: 4,
+                    shadows: const [Shadow(blurRadius: 10, color: Colors.black38)])),
+          ],
+        );
+      case PracticePhase.finished:
+        return const SizedBox.shrink();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
-  /// フェーズ別のグラデーション色
   List<Color> get _phaseGradient {
     switch (_phase) {
       case PracticePhase.countdown:
-        return [Colors.grey[800]!, Colors.grey[900]!];
+        return [const Color(0xFF1a1a2e), const Color(0xFF16213e)];
       case PracticePhase.sprint:
         return _remainingMs <= 3000
-            ? [Colors.red[700]!, Colors.red[900]!]
-            : [Colors.green[600]!, Colors.green[900]!];
+            ? [const Color(0xFFb71c1c), const Color(0xFF880e4f)]
+            : [const Color(0xFF1b5e20), const Color(0xFF004d40)];
       case PracticePhase.rest:
         return _remainingMs <= 3000
-            ? [Colors.orange[700]!, Colors.orange[900]!]
-            : [Colors.blue[600]!, Colors.blue[900]!];
+            ? [const Color(0xFFe65100), const Color(0xFFbf360c)]
+            : [const Color(0xFF0d47a1), const Color(0xFF1a237e)];
       case PracticePhase.finished:
-        return [Colors.amber[600]!, Colors.amber[900]!];
+        return [const Color(0xFFf57f17), const Color(0xFFe65100)];
       default:
         return [Colors.grey[200]!, Colors.grey[300]!];
     }
   }
 
-  /// フェーズ別のテキスト
-  String get _phaseText {
-    switch (_phase) {
-      case PracticePhase.countdown:
-        return '準備...';
-      case PracticePhase.sprint:
-        return '走れ!';
-      case PracticePhase.rest:
-        return '休憩';
-      case PracticePhase.finished:
-        return '完了!';
-      default:
-        return '';
-    }
-  }
-
-  /// ボタンエリア
   Widget _buildButtons() {
     switch (_phase) {
       case PracticePhase.idle:
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: SizedBox(
-            width: double.infinity,
-            height: 60,
+            width: double.infinity, height: 60,
             child: ElevatedButton(
               onPressed: _onStart,
               style: ElevatedButton.styleFrom(
@@ -529,9 +560,9 @@ class _PracticeScreenState extends State<PracticeScreen>
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text('スタート',
-                  style:
-                      TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              child: const Text('START',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
+                      letterSpacing: 4)),
             ),
           ),
         );
@@ -541,19 +572,18 @@ class _PracticeScreenState extends State<PracticeScreen>
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: SizedBox(
-            width: double.infinity,
-            height: 60,
+            width: double.infinity, height: 60,
             child: ElevatedButton(
               onPressed: _onCancel,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: Colors.red[900],
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text('中止',
-                  style:
-                      TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              child: const Text('STOP',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
+                      letterSpacing: 4)),
             ),
           ),
         );
@@ -561,19 +591,18 @@ class _PracticeScreenState extends State<PracticeScreen>
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: SizedBox(
-            width: double.infinity,
-            height: 60,
+            width: double.infinity, height: 60,
             child: ElevatedButton(
               onPressed: _onReset,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
+                backgroundColor: Colors.blue[800],
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text('リセット',
-                  style:
-                      TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              child: const Text('RESET',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
+                      letterSpacing: 4)),
             ),
           ),
         );
@@ -582,58 +611,83 @@ class _PracticeScreenState extends State<PracticeScreen>
 }
 
 // ========================================
-//  スピードラインのカスタムペインター
+//  横方向スピードライン（走行中）
 // ========================================
-
-class _SpeedLinePainter extends CustomPainter {
+class _HorizontalSpeedPainter extends CustomPainter {
   final double progress;
-  final Random random;
 
-  _SpeedLinePainter({required this.progress, required this.random});
+  _HorizontalSpeedPainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+    final paint = Paint()..style = PaintingStyle.stroke;
 
-    // 集中線（中心から外に向かう線）
-    final centerX = size.width / 2;
-    final centerY = size.height / 2;
+    // 水平方向の流れるライン
+    for (int i = 0; i < 25; i++) {
+      final seed = i * 137.5;
+      final y = (seed % size.height);
+      final xStart = ((seed * 3.7 + progress * size.width * 2) % (size.width * 1.5)) - size.width * 0.3;
+      final lineLen = 40.0 + (i % 5) * 30;
+      final thickness = 1.0 + (i % 3) * 1.5;
+      final alpha = 40 + (i % 4) * 25;
 
-    for (int i = 0; i < 30; i++) {
-      // 擬似ランダム（seedを固定して安定させる）
-      final angle = (i * 12.0 + progress * 360) * pi / 180;
-      final innerR = 60.0 + (i % 5) * 20;
-      final outerR = size.width * 0.8 + (i % 3) * 40;
-      final opacity = 0.1 + (i % 4) * 0.08;
+      paint.strokeWidth = thickness;
+      paint.color = Colors.white.withAlpha(alpha);
 
-      paint.color = Colors.white.withAlpha((opacity * 255).toInt());
-
-      final x1 = centerX + cos(angle) * innerR;
-      final y1 = centerY + sin(angle) * innerR;
-      final x2 = centerX + cos(angle) * outerR;
-      final y2 = centerY + sin(angle) * outerR;
-
-      canvas.drawLine(Offset(x1, y1), Offset(x2, y2), paint);
+      canvas.drawLine(
+        Offset(xStart, y),
+        Offset(xStart + lineLen, y),
+        paint,
+      );
     }
 
-    // 流れる光の粒子
+    // 光の粒子（横に流れる）
     paint.style = PaintingStyle.fill;
-    for (int i = 0; i < 15; i++) {
-      final angle = (i * 24.0 + progress * 720) * pi / 180;
-      final dist = 80.0 + ((i * 47 + (progress * 200).toInt()) % 300);
-      final x = centerX + cos(angle) * dist;
-      final y = centerY + sin(angle) * dist;
-      final radius = 1.5 + (i % 3) * 1.0;
+    for (int i = 0; i < 20; i++) {
+      final seed = i * 89.3;
+      final y = (seed * 4.1) % size.height;
+      final x = ((seed * 2.3 + progress * size.width * 3) % (size.width * 1.4)) - size.width * 0.2;
+      final radius = 1.5 + (i % 3) * 1.2;
+      final alpha = 60 + (i % 5) * 20;
 
-      paint.color = Colors.white.withAlpha(80 + (i % 4) * 30);
+      paint.color = Colors.greenAccent.withAlpha(alpha);
       canvas.drawCircle(Offset(x, y), radius, paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _SpeedLinePainter oldDelegate) {
-    return oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _HorizontalSpeedPainter old) =>
+      old.progress != progress;
+}
+
+// ========================================
+//  漂う光（休憩中）
+// ========================================
+class _FloatingLightPainter extends CustomPainter {
+  final double progress;
+
+  _FloatingLightPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..style = PaintingStyle.fill;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+
+    for (int i = 0; i < 12; i++) {
+      final angle = (i * 30 + progress * 60) * pi / 180;
+      final dist = 60.0 + (i % 4) * 40 + sin(progress * 2 * pi + i) * 20;
+      final x = cx + cos(angle) * dist;
+      final y = cy + sin(angle) * dist;
+      final radius = 3.0 + (i % 3) * 2;
+      final alpha = 30 + (i % 4) * 15;
+
+      paint.color = Colors.lightBlueAccent.withAlpha(alpha);
+      canvas.drawCircle(Offset(x, y), radius, paint);
+    }
   }
+
+  @override
+  bool shouldRepaint(covariant _FloatingLightPainter old) =>
+      old.progress != progress;
 }
