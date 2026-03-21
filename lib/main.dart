@@ -32,25 +32,29 @@ class RunbikeApp extends StatelessWidget {
   }
 }
 
-/// Web版のみ: 最初にタップさせて音声を解禁する画面
-class WebAudioUnlockScreen extends StatelessWidget {
+/// Web版のみ: 最初にタップさせて音声を解禁 → MP3プリロード → ホーム画面へ
+class WebAudioUnlockScreen extends StatefulWidget {
   const WebAudioUnlockScreen({super.key});
 
-  Future<void> _unlockAudio(BuildContext context) async {
+  @override
+  State<WebAudioUnlockScreen> createState() => _WebAudioUnlockScreenState();
+}
+
+class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
+  bool _isLoading = false;
+
+  Future<void> _unlockAudio() async {
+    if (_isLoading) return; // 二重タップ防止
+    setState(() => _isLoading = true);
+
     // ユーザータップで音声コンテキスト解禁
     // index.html の unlockAudio() が click イベントで自動実行される
 
-    // 全スタート音MP3をWeb Audio APIでプリデコード
-    // → 以降の再生はレイテンシーほぼゼロ
-    WebAudioService.preloadSound('start01.mp3');
-    WebAudioService.preloadSound('start02.mp3');
-    WebAudioService.preloadSound('start03.mp3');
-
-    // 少し待ってからホーム画面へ（プリロード開始を確実にする）
-    await Future.delayed(const Duration(milliseconds: 500));
+    // 全スタート音MP3をWeb Audio APIでプリデコード（完了を待つ）
+    await WebAudioService.preloadAllSounds();
 
     // ホーム画面へ遷移（戻れないように置換）
-    if (context.mounted) {
+    if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
@@ -61,7 +65,7 @@ class WebAudioUnlockScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: GestureDetector(
-        onTap: () => _unlockAudio(context),
+        onTap: _unlockAudio,
         child: Container(
           width: double.infinity,
           height: double.infinity,
@@ -87,28 +91,47 @@ class WebAudioUnlockScreen extends StatelessWidget {
                       letterSpacing: 4,
                     )),
                 const SizedBox(height: 48),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 40, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: Colors.white54),
+
+                // ローディング中 or タップ待ち
+                if (_isLoading) ...[
+                  const SizedBox(
+                    width: 48, height: 48,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3,
+                    ),
                   ),
-                  child: const Text('タップして開始',
+                  const SizedBox(height: 16),
+                  const Text('音声を準備中...',
                       style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        fontSize: 18,
+                        color: Colors.white70,
                         letterSpacing: 2,
                       )),
-                ),
-                const SizedBox(height: 24),
-                Text('※ 音声機能を有効にするため\n  最初にタップが必要です',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withAlpha(150))),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 40, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white54),
+                    ),
+                    child: const Text('タップして開始',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 2,
+                        )),
+                  ),
+                  const SizedBox(height: 24),
+                  Text('※ 音声機能を有効にするため\n  最初にタップが必要です',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withAlpha(150))),
+                ],
               ],
             ),
           ),

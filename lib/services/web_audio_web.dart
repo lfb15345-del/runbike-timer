@@ -3,7 +3,6 @@ import 'dart:js_interop_unsafe';
 
 /// Web版専用: JavaScript の Web Audio API を呼び出す
 /// index.html に定義した関数を Dart から globalContext 経由で呼ぶ
-/// dart:js_interop_unsafe を使用（@JS アノテーションより安定）
 class WebAudioService {
   /// メトロノームのクリック音を1回鳴らす
   static void playTick() {
@@ -54,16 +53,25 @@ class WebAudioService {
     } catch (_) {}
   }
 
-  /// MP3ファイルをプリロード（Web Audio APIでデコード → バッファ保持）
-  /// 呼び出し後、バックグラウンドでデコードされる（fire-and-forget）
+  /// MP3ファイルを1つプリロード（fire-and-forget）
   static void preloadSound(String filename) {
     try {
       globalContext.callMethod('preloadSound'.toJS, filename.toJS);
     } catch (_) {}
   }
 
+  /// 全スタート音を一括プリロード（完了を待てる）
+  /// JSの preloadAllSounds() は Promise を返す
+  static Future<void> preloadAllSounds() async {
+    try {
+      final result = globalContext.callMethod('preloadAllSounds'.toJS);
+      if (result != null) {
+        await (result as JSPromise<JSAny?>).toDart;
+      }
+    } catch (_) {}
+  }
+
   /// プリロード済みのサウンドバッファを即時再生
-  /// レイテンシーほぼゼロ（audioplayers より高精度）
   static void playSoundBuffer(String filename) {
     try {
       globalContext.callMethod('playSoundBuffer'.toJS, filename.toJS);

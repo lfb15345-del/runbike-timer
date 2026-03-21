@@ -177,7 +177,8 @@
     async function preloadSound(filename) {
       try {
         var ctx = getAudioCtx();
-        var url = 'assets/sounds/' + filename;
+        // Flutter Webのアセットパス: assets/assets/sounds/xxx
+        var url = 'assets/assets/sounds/' + filename;
         var response = await fetch(url);
         var arrayBuffer = await response.arrayBuffer();
         _soundBuffers[filename] = await ctx.decodeAudioData(arrayBuffer);
@@ -185,6 +186,16 @@
       } catch(e) {
         console.error('[Audio] Preload failed: ' + filename, e);
       }
+    }
+
+    // 複数ファイルを一括プリロード
+    async function preloadAllSounds() {
+      await Promise.all([
+        preloadSound('start01.mp3'),
+        preloadSound('start02.mp3'),
+        preloadSound('start03.mp3')
+      ]);
+      console.log('[Audio] All sounds preloaded:', Object.keys(_soundBuffers));
     }
 
     // プリロード済みバッファから即時再生（レイテンシーほぼゼロ）

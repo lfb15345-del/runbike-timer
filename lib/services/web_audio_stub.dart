@@ -9,6 +9,7 @@ class WebAudioService {
   static void stopUpbeat() {}
   static void stopAll() {}
   static void preloadSound(String filename) {}
+  static Future<void> preloadAllSounds() async {}
   static void playSoundBuffer(String filename) {}
   static void stopSoundBuffer() {}
 }
