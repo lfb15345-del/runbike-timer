@@ -47,6 +47,21 @@ class _HomePageState extends State<HomePage> {
     CourseScreen(),
   ];
 
+  /// タイマー実行中はタブ切替をブロック
+  void _onTabTapped(int index) {
+    // 計測中 or 練習中はタブ切替を防止
+    if (MeasureScreen.isRunning || PracticeScreen.isRunning) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('実行中はタブを切り替えられません'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+    setState(() => _currentIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,7 +72,7 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        onDestinationSelected: _onTabTapped,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.timer),

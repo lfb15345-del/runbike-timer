@@ -13,6 +13,9 @@ enum TimerState { waiting, countdown, measuring }
 class MeasureScreen extends StatefulWidget {
   const MeasureScreen({super.key});
 
+  /// 他の画面からチェック用（計測中はタブ切替をブロック）
+  static bool isRunning = false;
+
   @override
   State<MeasureScreen> createState() => _MeasureScreenState();
 }
@@ -204,7 +207,10 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     final offset = _startOffsets[_selectedSound]!;
     final soundFile = _soundFiles[_selectedSound];
 
-    setState(() => _state = TimerState.countdown);
+    setState(() {
+      _state = TimerState.countdown;
+      MeasureScreen.isRunning = true;
+    });
 
     // 録画ONなら録画開始
     if (_isRecordingEnabled && _isCameraInitialized) {
@@ -255,6 +261,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
     setState(() {
       _state = TimerState.waiting;
+      MeasureScreen.isRunning = false;
       _elapsedMs = 0;
       _measureStartTime = null;
       _teamFinished.clear();
@@ -274,6 +281,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     setState(() {
       _elapsedMs = finalTime;
       _state = TimerState.waiting;
+      MeasureScreen.isRunning = false;
       _measureStartTime = null;
     });
 

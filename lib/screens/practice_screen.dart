@@ -11,6 +11,9 @@ enum PracticePhase { idle, countdown, sprint, rest, finished }
 class PracticeScreen extends StatefulWidget {
   const PracticeScreen({super.key});
 
+  /// 他の画面からチェック用（練習中はタブ切替をブロック）
+  static bool isRunning = false;
+
   @override
   State<PracticeScreen> createState() => _PracticeScreenState();
 }
@@ -94,6 +97,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     setState(() {
       _phase = PracticePhase.countdown;
       _currentRound = 1;
+      PracticeScreen.isRunning = true;
     });
 
     final playStart = DateTime.now();
@@ -223,6 +227,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     setState(() {
       _phase = PracticePhase.finished;
       _remainingMs = 0;
+      PracticeScreen.isRunning = false;
     });
   }
 
@@ -236,6 +241,7 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.idle;
       _currentRound = 1;
       _remainingMs = 0;
+      PracticeScreen.isRunning = false;
     });
   }
 
@@ -244,6 +250,7 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.idle;
       _currentRound = 1;
       _remainingMs = 0;
+      PracticeScreen.isRunning = false;
     });
   }
 
