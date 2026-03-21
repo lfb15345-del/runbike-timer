@@ -566,8 +566,11 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   Widget build(BuildContext context) {
     final today = DateTime.now();
     final dateStr = '${today.year}/${today.month.toString().padLeft(2, '0')}/${today.day.toString().padLeft(2, '0')}';
+    final isMeasuring = _state == TimerState.measuring;
 
     return Scaffold(
+      // 計測中は背景色を変えて視覚的に強調
+      backgroundColor: isMeasuring ? Colors.green[50] : null,
       body: SafeArea(
         child: Stack(
           children: [
@@ -575,47 +578,58 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // --- 上部: 日付・子ども・モード ---
-                  Text(dateStr, style: const TextStyle(fontSize: 16, color: Colors.grey)),
-                  const SizedBox(height: 8),
+                  // --- 上部: 日付・子ども・モード（計測中は最小限） ---
+                  if (!isMeasuring) ...[
+                    Text(dateStr, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                    const SizedBox(height: 8),
+                  ],
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         _currentChildName,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: isMeasuring ? 18 : 22,
+                          fontWeight: FontWeight.bold,
+                          color: isMeasuring ? Colors.green[800] : null,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        onPressed: _state == TimerState.waiting ? _showChildSelector : null,
-                        child: const Text('変更'),
-                      ),
+                      if (!isMeasuring) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: _state == TimerState.waiting ? _showChildSelector : null,
+                          child: const Text('変更'),
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('個人'),
-                      Switch(
-                        value: _isTeamMode,
-                        onChanged: _state == TimerState.waiting
-                            ? (v) => setState(() => _isTeamMode = v)
-                            : null,
-                      ),
-                      const Text('チーム'),
-                    ],
-                  ),
+                  if (!isMeasuring) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('個人'),
+                        Switch(
+                          value: _isTeamMode,
+                          onChanged: _state == TimerState.waiting
+                              ? (v) => setState(() => _isTeamMode = v)
+                              : null,
+                        ),
+                        const Text('チーム'),
+                      ],
+                    ),
+                  ],
 
                   const Spacer(),
 
-                  // --- 中央: タイマー表示 ---
+                  // --- 中央: タイマー表示（計測中はさらに大きく） ---
                   Text(
                     _formatTime(_elapsedMs),
-                    style: const TextStyle(
-                      fontSize: 72,
+                    style: TextStyle(
+                      fontSize: isMeasuring ? 88 : 72,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'monospace',
+                      color: isMeasuring ? Colors.green[900] : null,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -633,50 +647,52 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
                   const SizedBox(height: 24),
 
-                  // --- スタート音選択 ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: _soundLabels.entries.map((entry) {
-                      final isSelected = _selectedSound == entry.key;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: ChoiceChip(
-                          label: Text(entry.value),
-                          selected: isSelected,
-                          onSelected: _state == TimerState.waiting
-                              ? (_) => setState(() => _selectedSound = entry.key)
-                              : null,
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                  // --- スタート音選択（計測中は非表示） ---
+                  if (!isMeasuring)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: _soundLabels.entries.map((entry) {
+                        final isSelected = _selectedSound == entry.key;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ChoiceChip(
+                            label: Text(entry.value),
+                            selected: isSelected,
+                            onSelected: _state == TimerState.waiting
+                                ? (_) => setState(() => _selectedSound = entry.key)
+                                : null,
+                          ),
+                        );
+                      }).toList(),
+                    ),
 
-                  const SizedBox(height: 8),
+                  if (!isMeasuring) const SizedBox(height: 8),
 
-                  // --- 録画スイッチ ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _isVideoRecording ? Icons.fiber_manual_record : Icons.videocam,
-                        size: 20,
-                        color: _isVideoRecording ? Colors.red : null,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isVideoRecording ? '録画中' : '録画',
-                        style: TextStyle(
+                  // --- 録画スイッチ（計測中は非表示） ---
+                  if (!isMeasuring)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _isVideoRecording ? Icons.fiber_manual_record : Icons.videocam,
+                          size: 20,
                           color: _isVideoRecording ? Colors.red : null,
-                          fontWeight: _isVideoRecording ? FontWeight.bold : null,
                         ),
-                      ),
-                      Switch(
-                        value: _isRecordingEnabled,
-                        onChanged: _state == TimerState.waiting ? _toggleRecording : null,
-                        activeColor: Colors.red,
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _isVideoRecording ? '録画中' : '録画',
+                          style: TextStyle(
+                            color: _isVideoRecording ? Colors.red : null,
+                            fontWeight: _isVideoRecording ? FontWeight.bold : null,
+                          ),
+                        ),
+                        Switch(
+                          value: _isRecordingEnabled,
+                          onChanged: _state == TimerState.waiting ? _toggleRecording : null,
+                          activeColor: Colors.red,
+                        ),
+                      ],
+                    ),
 
                   const Spacer(),
 

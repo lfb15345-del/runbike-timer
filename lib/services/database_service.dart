@@ -16,7 +16,7 @@ class DatabaseService {
     final dbPath = await getDatabasesPath();
     _db = await openDatabase(
       '$dbPath/runbike.db',
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         // 子どもテーブル
         await db.execute('''
@@ -47,13 +47,15 @@ class DatabaseService {
             FOREIGN KEY (session_id) REFERENCES session(id)
           )
         ''');
-        // 走行結果テーブル
+        // 走行結果テーブル（v2: 速度カラム追加）
         await db.execute('''
           CREATE TABLE run_result (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id INTEGER NOT NULL,
             child_id INTEGER NOT NULL,
             time_ms INTEGER NOT NULL,
+            max_speed_kmh REAL,
+            avg_speed_kmh REAL,
             FOREIGN KEY (run_id) REFERENCES run(id),
             FOREIGN KEY (child_id) REFERENCES child(id)
           )
@@ -73,6 +75,13 @@ class DatabaseService {
             created_at TEXT NOT NULL
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // v1→v2: 速度データ用のカラムを追加
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE run_result ADD COLUMN max_speed_kmh REAL');
+          await db.execute('ALTER TABLE run_result ADD COLUMN avg_speed_kmh REAL');
+        }
       },
     );
   }
@@ -167,6 +176,23 @@ class DatabaseService {
     await _db!.delete('run_result', where: 'id = ?', whereArgs: [runResultId]);
   }
 
+  /// 走行結果のスピードデータを更新
+  static Future<void> updateRunResultSpeed({
+    required int runResultId,
+    double? maxSpeedKmh,
+    double? avgSpeedKmh,
+  }) async {
+    await _db!.update(
+      'run_result',
+      {
+        'max_speed_kmh': maxSpeedKmh,
+        'avg_speed_kmh': avgSpeedKmh,
+      },
+      where: 'id = ?',
+      whereArgs: [runResultId],
+    );
+  }
+
   static Future<int?> getAllTimeBest(int childId) async {
     final results = await _db!.rawQuery('''
       SELECT MIN(rr.time_ms) as best FROM run_result rr
@@ -176,6 +202,32 @@ class DatabaseService {
 
     if (results.isNotEmpty && results.first['best'] != null) {
       return results.first['best'] as int;
+    }
+    return null;
+  }
+
+  /// 歴代最高速度を取得
+  static Future<double?> getAllTimeBestMaxSpeed(int childId) async {
+    final results = await _db!.rawQuery('''
+      SELECT MAX(rr.max_speed_kmh) as best FROM run_result rr
+      INNER JOIN run r ON rr.run_id = r.id
+      WHERE rr.child_id = ? AND r.status = 'done' AND rr.max_speed_kmh IS NOT NULL
+    ''', [childId]);
+    if (results.isNotEmpty && results.first['best'] != null) {
+      return results.first['best'] as double;
+    }
+    return null;
+  }
+
+  /// 歴代最高平均速度を取得
+  static Future<double?> getAllTimeBestAvgSpeed(int childId) async {
+    final results = await _db!.rawQuery('''
+      SELECT MAX(rr.avg_speed_kmh) as best FROM run_result rr
+      INNER JOIN run r ON rr.run_id = r.id
+      WHERE rr.child_id = ? AND r.status = 'done' AND rr.avg_speed_kmh IS NOT NULL
+    ''', [childId]);
+    if (results.isNotEmpty && results.first['best'] != null) {
+      return results.first['best'] as double;
     }
     return null;
   }

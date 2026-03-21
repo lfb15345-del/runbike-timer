@@ -18,6 +18,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   List<Map<String, dynamic>> _todayResults = [];
   int? _todayBest;
   int? _allTimeBest;
+  double? _bestMaxSpeed;
+  double? _bestAvgSpeed;
 
   @override
   void initState() {
@@ -50,6 +52,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Future<void> _selectChild(int childId, String childName) async {
     final results = await DatabaseService.getTodayResults(childId);
     final allTimeBest = await DatabaseService.getAllTimeBest(childId);
+    final bestMaxSpeed = await DatabaseService.getAllTimeBestMaxSpeed(childId);
+    final bestAvgSpeed = await DatabaseService.getAllTimeBestAvgSpeed(childId);
 
     int? todayBest;
     if (results.isNotEmpty) {
@@ -64,6 +68,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _todayResults = results;
       _todayBest = todayBest;
       _allTimeBest = allTimeBest;
+      _bestMaxSpeed = bestMaxSpeed;
+      _bestAvgSpeed = bestAvgSpeed;
     });
   }
 
@@ -74,7 +80,104 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return '${seconds.toString().padLeft(2, '0')}.${millis.toString().padLeft(3, '0')}';
   }
 
-  /// シェアテキストを作成（今日の記録一覧だけ）
+  /// 速度入力ダイアログ
+  void _showSpeedInputDialog(Map<String, dynamic> result) {
+    final resultId = result['id'] as int;
+    final timeMs = result['time_ms'] as int;
+    final currentMax = result['max_speed_kmh'] as double?;
+    final currentAvg = result['avg_speed_kmh'] as double?;
+
+    final maxController = TextEditingController(
+      text: currentMax != null ? currentMax.toString() : '',
+    );
+    final avgController = TextEditingController(
+      text: currentAvg != null ? currentAvg.toString() : '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16, right: 16, top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${_formatTime(timeMs)}秒 のスピード記録',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: maxController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: '最高速度 (km/h)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.speed, color: Colors.orange),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: avgController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: '平均速度 (km/h)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.trending_up, color: Colors.blue),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('キャンセル'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final maxSpeed = double.tryParse(maxController.text);
+                      final avgSpeed = double.tryParse(avgController.text);
+                      await DatabaseService.updateRunResultSpeed(
+                        runResultId: resultId,
+                        maxSpeedKmh: maxSpeed,
+                        avgSpeedKmh: avgSpeed,
+                      );
+                      if (mounted) Navigator.pop(context);
+                      // データを再読み込み
+                      await _selectChild(_selectedChildId!, _selectedChildName);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('保存'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// シェアテキストを作成（今日の記録一覧 + 速度）
   Future<void> _shareResults() async {
     if (_todayResults.isEmpty) return;
 
@@ -83,18 +186,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     buffer.writeln('');
 
     for (int i = 0; i < _todayResults.length; i++) {
-      final timeMs = _todayResults[i]['time_ms'] as int;
+      final r = _todayResults[i];
+      final timeMs = r['time_ms'] as int;
+      final maxSpd = r['max_speed_kmh'] as double?;
+      final avgSpd = r['avg_speed_kmh'] as double?;
       final isBest = timeMs == _todayBest;
       buffer.write('${i + 1}本目: ${_formatTime(timeMs)}秒');
+      if (maxSpd != null) buffer.write(' 最高${maxSpd.toStringAsFixed(1)}km/h');
+      if (avgSpd != null) buffer.write(' 平均${avgSpd.toStringAsFixed(1)}km/h');
       if (isBest && _todayResults.length > 1) buffer.write(' ★ベスト');
       buffer.writeln();
     }
 
-    // Web版ではクリップボードにコピー（スマホ版では share_plus を使う）
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('結果をクリップボードにコピーしました！'), duration: Duration(seconds: 2)),
+        const SnackBar(content: Text('結果をコピーしました！'), duration: Duration(seconds: 2)),
       );
     }
   }
@@ -145,7 +252,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
 
-                // サマリーカード
+                // タイムサマリーカード
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -166,13 +273,55 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                // スピード記録カード（データがある場合のみ）
+                if (_bestMaxSpeed != null || _bestAvgSpeed != null)
+                  Card(
+                    color: Colors.orange[50],
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.speed, color: Colors.orange, size: 20),
+                              SizedBox(width: 8),
+                              Text('スピード記録',
+                                  style: TextStyle(
+                                      fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _statColumn(
+                                '歴代 最高速度',
+                                _bestMaxSpeed != null
+                                    ? '${_bestMaxSpeed!.toStringAsFixed(1)} km/h'
+                                    : '-',
+                              ),
+                              _statColumn(
+                                '歴代 平均速度ベスト',
+                                _bestAvgSpeed != null
+                                    ? '${_bestAvgSpeed!.toStringAsFixed(1)} km/h'
+                                    : '-',
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 12),
 
                 const Row(
                   children: [
-                    Text('今日の走行一覧', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text('今日の走行一覧',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     SizedBox(width: 8),
-                    Text('← スワイプで削除', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text('タップで速度入力 / スワイプで削除',
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -187,6 +336,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             final timeMs = result['time_ms'] as int;
                             final resultId = result['id'] as int;
                             final isBest = timeMs == _todayBest;
+                            final maxSpd = result['max_speed_kmh'] as double?;
+                            final avgSpd = result['avg_speed_kmh'] as double?;
+                            final hasSpeed = maxSpd != null || avgSpd != null;
+
                             return Dismissible(
                               key: ValueKey(resultId),
                               direction: DismissDirection.endToStart,
@@ -209,7 +362,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                       ),
                                       TextButton(
                                         onPressed: () => Navigator.pop(context, true),
-                                        child: const Text('削除', style: TextStyle(color: Colors.red)),
+                                        child: const Text('削除',
+                                            style: TextStyle(color: Colors.red)),
                                       ),
                                     ],
                                   ),
@@ -221,20 +375,35 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                               },
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: isBest ? Colors.amber : Colors.grey[300],
+                                  backgroundColor:
+                                      isBest ? Colors.amber : Colors.grey[300],
                                   child: Text('${index + 1}'),
                                 ),
                                 title: Text(
                                   '${_formatTime(timeMs)} 秒',
                                   style: TextStyle(
                                     fontSize: 20,
-                                    fontWeight: isBest ? FontWeight.bold : FontWeight.normal,
+                                    fontWeight:
+                                        isBest ? FontWeight.bold : FontWeight.normal,
                                     color: isBest ? Colors.amber[800] : null,
                                   ),
                                 ),
+                                subtitle: hasSpeed
+                                    ? Text(
+                                        [
+                                          if (maxSpd != null) '最高 ${maxSpd.toStringAsFixed(1)}km/h',
+                                          if (avgSpd != null) '平均 ${avgSpd.toStringAsFixed(1)}km/h',
+                                        ].join('  '),
+                                        style: TextStyle(
+                                          color: Colors.orange[700],
+                                          fontSize: 13,
+                                        ),
+                                      )
+                                    : null,
                                 trailing: isBest
                                     ? const Icon(Icons.star, color: Colors.amber)
                                     : null,
+                                onTap: () => _showSpeedInputDialog(result),
                               ),
                             );
                           },

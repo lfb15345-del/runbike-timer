@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/measure_screen.dart';
+import 'screens/practice_screen.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/course_screen.dart';
 import 'services/database_service.dart';
@@ -28,7 +29,7 @@ class RunbikeApp extends StatelessWidget {
   }
 }
 
-/// 3タブのメイン画面
+/// 4タブのメイン画面
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -41,6 +42,7 @@ class _HomePageState extends State<HomePage> {
 
   final _screens = const [
     MeasureScreen(),
+    PracticeScreen(),
     AnalysisScreen(),
     CourseScreen(),
   ];
@@ -48,7 +50,11 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      // IndexedStack でタブ切替してもタイマーが消えない
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
@@ -57,6 +63,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.timer),
             selectedIcon: Icon(Icons.timer, color: Colors.green),
             label: '計測',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.fitness_center_outlined),
+            selectedIcon: Icon(Icons.fitness_center, color: Colors.green),
+            label: '練習',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
