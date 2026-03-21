@@ -49,6 +49,10 @@
   <script>
     // グローバルAudioContext（全音声で共有）
     var _audioCtx = null;
+    var _masterOutput = null;       // マスター出力ノード（全音声の合流点）
+    var _recordingDest = null;      // 録画用のMediaStreamDestination
+    var _micSource = null;          // マイク音声のソースノード
+
     function getAudioCtx() {
       if (!_audioCtx) {
         var AC = window.AudioContext || window.webkitAudioContext;
@@ -56,6 +60,17 @@
       }
       if (_audioCtx.state === 'suspended') _audioCtx.resume();
       return _audioCtx;
+    }
+
+    // マスター出力ノード（全音声はここを経由→スピーカー＋録画に分岐）
+    function getAudioOutput() {
+      var ctx = getAudioCtx();
+      if (!_masterOutput) {
+        _masterOutput = ctx.createGain();
+        _masterOutput.gain.value = 1.0;
+        _masterOutput.connect(ctx.destination); // スピーカーへ常時接続
+      }
+      return _masterOutput;
     }
 
     // 最初のタッチ/クリックで音声解禁
@@ -81,7 +96,7 @@
       osc.frequency.value = 1000;
       gain.gain.setValueAtTime(0.5, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(getAudioOutput());
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.03);
     }
@@ -100,12 +115,12 @@
       var ctx = getAudioCtx();
       var t = ctx.currentTime;
       var dur = 0.8;
-      var masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(0, t);
-      masterGain.gain.linearRampToValueAtTime(0.6, t + 0.02);
-      masterGain.gain.setValueAtTime(0.6, t + dur - 0.2);
-      masterGain.gain.linearRampToValueAtTime(0, t + dur);
-      masterGain.connect(ctx.destination);
+      var whistleGain = ctx.createGain();
+      whistleGain.gain.setValueAtTime(0, t);
+      whistleGain.gain.linearRampToValueAtTime(0.6, t + 0.02);
+      whistleGain.gain.setValueAtTime(0.6, t + dur - 0.2);
+      whistleGain.gain.linearRampToValueAtTime(0, t + dur);
+      whistleGain.connect(getAudioOutput());
       // 複数のオシレーターで太い音
       [220, 330, 440, 277].forEach(function(freq, i) {
         var osc = ctx.createOscillator();
@@ -113,7 +128,7 @@
         osc.type = 'sawtooth';
         osc.frequency.value = freq;
         g.gain.value = i === 0 ? 0.3 : 0.15;
-        osc.connect(g); g.connect(masterGain);
+        osc.connect(g); g.connect(whistleGain);
         osc.start(t); osc.stop(t + dur);
       });
     }
@@ -130,7 +145,7 @@
       osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.1);
       gain.gain.setValueAtTime(0.8, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(getAudioOutput());
       osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
     }
     function _playHihat() {
@@ -147,7 +162,7 @@
       var gain = ctx.createGain();
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-      src.connect(hp); hp.connect(gain); gain.connect(ctx.destination);
+      src.connect(hp); hp.connect(gain); gain.connect(getAudioOutput());
       src.start(ctx.currentTime);
     }
     function startUpbeat() {
@@ -209,7 +224,7 @@
       var ctx = getAudioCtx();
       var source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      source.connect(getAudioOutput());
       source.start(0);
       _currentSoundSource = source;
       source.onended = function() { _currentSoundSource = null; };
@@ -278,6 +293,12 @@
 
     // カメラプレビュー停止
     function stopCameraPreview() {
+      // 録画中なら先に停止
+      if (_mediaRecorder && _mediaRecorder.state === 'recording') {
+        _mediaRecorder.stop();
+      }
+      _cleanupRecordingAudio();
+
       if (_cameraVideo) {
         _cameraVideo.remove();
         _cameraVideo = null;
@@ -322,14 +343,52 @@
       }
     }
 
-    // 録画開始
+    // 録画開始（カメラ映像 + マイク音声 + アプリ音声をミックス）
     function startCameraRecording() {
       if (!_cameraStream) return false;
       _recordedChunks = [];
 
-      // MIMEタイプの優先順位
+      var ctx = getAudioCtx();
+      var output = getAudioOutput(); // _masterOutput を確保
+
+      // ── 録画用ミックス音声ストリームを作成 ──
+      _recordingDest = ctx.createMediaStreamDestination();
+
+      // ① アプリ音声（Web Audio API出力）を録画ストリームに接続
+      _masterOutput.connect(_recordingDest);
+
+      // ② マイク音声も録画ストリームにミックス
+      var micTracks = _cameraStream.getAudioTracks();
+      if (micTracks.length > 0) {
+        var micStream = new MediaStream(micTracks);
+        _micSource = ctx.createMediaStreamSource(micStream);
+        _micSource.connect(_recordingDest);
+      }
+
+      // ── カメラ映像 + ミックス音声 で合成ストリーム ──
+      var combinedStream = new MediaStream();
+
+      // カメラの映像トラック
+      _cameraStream.getVideoTracks().forEach(function(t) {
+        combinedStream.addTrack(t);
+      });
+
+      // ミックス済み音声トラック（アプリ音 + マイク音）
+      _recordingDest.stream.getAudioTracks().forEach(function(t) {
+        combinedStream.addTrack(t);
+      });
+
+      console.log('[Camera] Combined stream: video=' +
+        combinedStream.getVideoTracks().length +
+        ', audio=' + combinedStream.getAudioTracks().length);
+
+      // ── MediaRecorder を合成ストリームで作成 ──
       var mimeType = 'video/webm';
-      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+        mimeType = 'video/webm;codecs=vp9,opus';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
         mimeType = 'video/webm;codecs=vp9';
       } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
         mimeType = 'video/webm;codecs=vp8';
@@ -338,10 +397,10 @@
       }
 
       try {
-        _mediaRecorder = new MediaRecorder(_cameraStream, { mimeType: mimeType });
+        _mediaRecorder = new MediaRecorder(combinedStream, { mimeType: mimeType });
       } catch(e) {
         // フォールバック: MIMEタイプ指定なし
-        _mediaRecorder = new MediaRecorder(_cameraStream);
+        _mediaRecorder = new MediaRecorder(combinedStream);
       }
 
       _mediaRecorder.ondataavailable = function(e) {
@@ -353,7 +412,7 @@
       if (_cameraVideo) {
         _cameraVideo.style.border = '3px solid red';
       }
-      console.log('[Camera] Recording started (' + mimeType + ')');
+      console.log('[Camera] Recording started with app audio mixing (' + mimeType + ')');
       return true;
     }
 
@@ -361,6 +420,8 @@
     function stopCameraRecording() {
       return new Promise(function(resolve) {
         if (!_mediaRecorder || _mediaRecorder.state === 'inactive') {
+          // 録画用オーディオ接続をクリーンアップ
+          _cleanupRecordingAudio();
           resolve(false);
           return;
         }
@@ -391,6 +452,9 @@
           setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
           _recordedChunks = [];
 
+          // 録画用オーディオ接続を切断
+          _cleanupRecordingAudio();
+
           // プレビュー枠を白に戻す
           if (_cameraVideo) {
             _cameraVideo.style.border = '2px solid white';
@@ -401,6 +465,20 @@
 
         _mediaRecorder.stop();
       });
+    }
+
+    // 録画用オーディオ接続のクリーンアップ
+    function _cleanupRecordingAudio() {
+      // マスター出力から録画先への接続を切断
+      if (_masterOutput && _recordingDest) {
+        try { _masterOutput.disconnect(_recordingDest); } catch(e) {}
+      }
+      // マイクソースの切断
+      if (_micSource) {
+        try { _micSource.disconnect(); } catch(e) {}
+        _micSource = null;
+      }
+      _recordingDest = null;
     }
 
     // カメラが利用可能か確認
