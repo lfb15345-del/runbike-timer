@@ -145,9 +145,9 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.sprint;
       _remainingMs = _sprintSec * 1000;
     });
-    // ホイッスル音の後にBGM開始（ぶつ切り防止）
-    _whistlePlayer.play(AssetSource(_whistleSound));
-    Future.delayed(const Duration(milliseconds: 600), () {
+    // ビープ音（start02.mp3）のGO!直後 → ホイッスルは鳴らさない
+    // ビープ音の余韻が完全に消えてからBGM開始（2秒待つ）
+    Future.delayed(const Duration(milliseconds: 2000), () {
       if (_phase == PracticePhase.sprint) _startBgm();
     });
     _startCountdownTimer();
