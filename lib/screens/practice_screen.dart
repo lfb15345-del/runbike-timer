@@ -22,6 +22,11 @@ class _PracticeScreenState extends State<PracticeScreen>
   int _restSec = 40;
   int _totalRounds = 8;
 
+  // --- BGM設定 ---
+  String _bgmType = 'none'; // none, metronome, upbeat
+  int _metronomeBpm = 140;
+  Timer? _metronomeTimer;
+
   // --- 状態管理 ---
   PracticePhase _phase = PracticePhase.idle;
   int _currentRound = 1;
@@ -31,6 +36,8 @@ class _PracticeScreenState extends State<PracticeScreen>
   // --- 音声 ---
   final AudioPlayer _startPlayer = AudioPlayer();
   final AudioPlayer _bellPlayer = AudioPlayer();
+  final AudioPlayer _bgmPlayer = AudioPlayer();
+  final AudioPlayer _tickPlayer = AudioPlayer();
   static const int _startOffset = 10600;
   static const String _startSound = 'sounds/start02.mp3';
   static const String _bellSound = 'sounds/bell.wav';
@@ -55,8 +62,11 @@ class _PracticeScreenState extends State<PracticeScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _metronomeTimer?.cancel();
     _startPlayer.dispose();
     _bellPlayer.dispose();
+    _bgmPlayer.dispose();
+    _tickPlayer.dispose();
     _speedLineController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -99,18 +109,48 @@ class _PracticeScreenState extends State<PracticeScreen>
     _startSprint();
   }
 
+  // ========================================
+  //  BGM制御
+  // ========================================
+
+  /// BGMを開始（走行フェーズ開始時に呼ぶ）
+  void _startBgm() {
+    _stopBgm();
+    if (_bgmType == 'metronome') {
+      // メトロノーム: BPMに合わせてクリック音を繰り返す
+      final intervalMs = (60000 / _metronomeBpm).round();
+      _tickPlayer.play(AssetSource('sounds/tick.wav'));
+      _metronomeTimer = Timer.periodic(
+        Duration(milliseconds: intervalMs),
+        (_) => _tickPlayer.play(AssetSource('sounds/tick.wav')),
+      );
+    } else if (_bgmType == 'upbeat') {
+      _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+      _bgmPlayer.play(AssetSource('sounds/upbeat.wav'));
+    }
+  }
+
+  /// BGMを停止
+  void _stopBgm() {
+    _metronomeTimer?.cancel();
+    _metronomeTimer = null;
+    _bgmPlayer.stop();
+    _tickPlayer.stop();
+  }
+
   void _startSprint() {
-    // バイブレーション
     HapticFeedback.heavyImpact();
     setState(() {
       _phase = PracticePhase.sprint;
       _remainingMs = _sprintSec * 1000;
     });
+    _startBgm();
     _startCountdownTimer();
   }
 
   void _startRest() {
-    // カンカン音を鳴らす
+    // カンカン音 & BGM停止
+    _stopBgm();
     _bellPlayer.play(AssetSource(_bellSound));
     HapticFeedback.mediumImpact();
 
@@ -169,6 +209,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _onFinished() {
     _timer?.cancel();
+    _stopBgm();
     _bellPlayer.play(AssetSource(_bellSound));
     HapticFeedback.heavyImpact();
     _pulseController.stop();
@@ -181,6 +222,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _onCancel() {
     _timer?.cancel();
+    _stopBgm();
     _startPlayer.stop();
     _pulseController.stop();
     _pulseController.reset();
@@ -273,11 +315,68 @@ class _PracticeScreenState extends State<PracticeScreen>
                   })),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text('合計 $_totalTimeDisplay',
               style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+          const Divider(height: 20),
+          // BGM設定
+          const Text('走行中BGM', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _bgmChip('無音', 'none', Icons.volume_off),
+              const SizedBox(width: 8),
+              _bgmChip('メトロノーム', 'metronome', Icons.music_note),
+              const SizedBox(width: 8),
+              _bgmChip('アップテンポ', 'upbeat', Icons.audiotrack),
+            ],
+          ),
+          // メトロノームBPMスライダー
+          if (_bgmType == 'metronome') ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const SizedBox(width: 8),
+                Text('BPM', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                Expanded(
+                  child: Slider(
+                    value: _metronomeBpm.toDouble(),
+                    min: 80,
+                    max: 200,
+                    divisions: 24,
+                    label: '$_metronomeBpm',
+                    onChanged: (v) => setState(() => _metronomeBpm = v.round()),
+                  ),
+                ),
+                SizedBox(
+                  width: 40,
+                  child: Text('$_metronomeBpm',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _bgmChip(String label, String type, IconData icon) {
+    final selected = _bgmType == type;
+    return ChoiceChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: selected ? Colors.white : null),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 13,
+              color: selected ? Colors.white : null)),
+        ],
+      ),
+      selected: selected,
+      selectedColor: Colors.green,
+      onSelected: (_) => setState(() => _bgmType = type),
     );
   }
 
