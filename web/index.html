@@ -44,5 +44,31 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+
+  <!-- ブラウザの音声コンテキストを最初のタッチ/クリックで解禁 -->
+  <script>
+    function unlockAudio() {
+      // AudioContextを作成・再開（全ブラウザ対応）
+      var AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        var ctx = new AudioCtx();
+        ctx.resume();
+        // 無音を一瞬鳴らしてコンテキストを確実にアクティブ化
+        var buf = ctx.createBuffer(1, 1, 22050);
+        var src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+      }
+      // 全ての既存audio要素も再開
+      document.querySelectorAll('audio').forEach(function(a) {
+        a.load();
+      });
+      document.removeEventListener('touchstart', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    }
+    document.addEventListener('touchstart', unlockAudio, { once: false, passive: true });
+    document.addEventListener('click', unlockAudio, { once: false });
+  </script>
 </body>
 </html>
