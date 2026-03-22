@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../services/web_audio_service.dart';
+import 'measure_screen.dart';
 
 /// インターバル練習の状態
 enum PracticePhase { idle, countdown, sprint, rest, finished }
@@ -131,9 +132,10 @@ class _PracticeScreenState extends State<PracticeScreen>
       await _startPlayer.play(AssetSource(_startSound));
     }
 
-    // スタート音のオフセット後にGO!
+    // スタート音のオフセット + BT補正 後にGO!
+    final totalOffset = _startOffset + MeasureScreen.bluetoothOffsetMs;
     final measureStart =
-        playStartTime.add(const Duration(milliseconds: _startOffset));
+        playStartTime.add(Duration(milliseconds: totalOffset));
 
     final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
     if (waitMs > 0) {
@@ -217,7 +219,8 @@ class _PracticeScreenState extends State<PracticeScreen>
 
     // 休憩の最後にスタート音を再生（次ラウンドのカウントダウン）
     if (_currentRound < _totalRounds) {
-      final soundDelay = (_restSec * 1000) - _startOffset;
+      final nextTotalOffset = _startOffset + MeasureScreen.bluetoothOffsetMs;
+      final soundDelay = (_restSec * 1000) - nextTotalOffset;
       if (soundDelay > 0) {
         Future.delayed(Duration(milliseconds: soundDelay), () async {
           if (_phase == PracticePhase.rest) {
@@ -430,6 +433,69 @@ class _PracticeScreenState extends State<PracticeScreen>
               ],
             ),
           ],
+          const Divider(height: 16),
+          // Bluetooth遅延補正（計測タブと共有）
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.bluetooth,
+                size: 18,
+                color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'BT補正',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 32, height: 32,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  onPressed: MeasureScreen.bluetoothOffsetMs > 0
+                      ? () => setState(() => MeasureScreen.bluetoothOffsetMs =
+                          (MeasureScreen.bluetoothOffsetMs - 50).clamp(0, 500))
+                      : null,
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+              ),
+              Container(
+                width: 72,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: MeasureScreen.bluetoothOffsetMs > 0
+                      ? Colors.blue.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '+${MeasureScreen.bluetoothOffsetMs}ms',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 32, height: 32,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  onPressed: MeasureScreen.bluetoothOffsetMs < 500
+                      ? () => setState(() => MeasureScreen.bluetoothOffsetMs =
+                          (MeasureScreen.bluetoothOffsetMs + 50).clamp(0, 500))
+                      : null,
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

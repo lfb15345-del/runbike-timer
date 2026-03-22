@@ -18,6 +18,9 @@ class MeasureScreen extends StatefulWidget {
   /// 他の画面からチェック用（計測中はタブ切替をブロック）
   static bool isRunning = false;
 
+  /// Bluetooth遅延補正（ms） - 計測・練習画面で共有
+  static int bluetoothOffsetMs = 0;
+
   @override
   State<MeasureScreen> createState() => _MeasureScreenState();
 }
@@ -230,7 +233,8 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
   /// スタートボタン押下
   Future<void> _onStart() async {
-    final offset = _startOffsets[_selectedSound]!;
+    // スタート音のオフセット + Bluetooth補正
+    final offset = _startOffsets[_selectedSound]! + MeasureScreen.bluetoothOffsetMs;
     final soundFile = _soundFiles[_selectedSound];
 
     setState(() {
@@ -769,6 +773,74 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
                           activeColor: Colors.red,
                         ),
                       ],
+                    ),
+
+                  // --- Bluetooth遅延補正（計測中は非表示） ---
+                  if (!isMeasuring)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.bluetooth,
+                            size: 18,
+                            color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'BT補正',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // マイナスボタン
+                          SizedBox(
+                            width: 32, height: 32,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              iconSize: 20,
+                              onPressed: _state == TimerState.waiting && MeasureScreen.bluetoothOffsetMs > 0
+                                  ? () => setState(() => MeasureScreen.bluetoothOffsetMs = (MeasureScreen.bluetoothOffsetMs - 50).clamp(0, 500))
+                                  : null,
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                          ),
+                          // 現在値
+                          Container(
+                            width: 72,
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: MeasureScreen.bluetoothOffsetMs > 0
+                                  ? Colors.blue.withValues(alpha: 0.1)
+                                  : Colors.grey.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '+${MeasureScreen.bluetoothOffsetMs}ms',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
+                              ),
+                            ),
+                          ),
+                          // プラスボタン
+                          SizedBox(
+                            width: 32, height: 32,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              iconSize: 20,
+                              onPressed: _state == TimerState.waiting && MeasureScreen.bluetoothOffsetMs < 500
+                                  ? () => setState(() => MeasureScreen.bluetoothOffsetMs = (MeasureScreen.bluetoothOffsetMs + 50).clamp(0, 500))
+                                  : null,
+                              icon: const Icon(Icons.add_circle_outline),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
 
                   const Spacer(),
