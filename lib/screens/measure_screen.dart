@@ -361,9 +361,24 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     // 録画中なら停止
     if (_isVideoRecording) {
       if (kIsWeb) {
-        // Web版: 録画停止 → 自動ダウンロード
         WebCameraService.stopRecording().then((_) {
-          _showMessage('録画をダウンロードしました');
+          // 録画データがあれば確認ボタン付きで表示
+          if (WebCameraService.hasPendingRecording()) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('中止しました'),
+                duration: const Duration(seconds: 10),
+                action: SnackBarAction(
+                  label: '録画を確認',
+                  textColor: Colors.yellow,
+                  onPressed: () {
+                    WebCameraService.showPendingRecording();
+                  },
+                ),
+              ),
+            );
+          }
         });
       } else {
         _stopVideoRecording();
@@ -385,11 +400,11 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     final finalTime = DateTime.now().difference(_measureStartTime!).inMilliseconds;
     _timer?.cancel();
 
-    // 録画中なら停止
+    // 録画中なら停止（プレビューはまだ出さない）
+    final hadRecording = _isVideoRecording;
     if (_isVideoRecording) {
       if (kIsWeb) {
         await WebCameraService.stopRecording();
-        _showMessage('録画をダウンロードしました');
       } else {
         await _stopVideoRecording();
       }
@@ -419,7 +434,25 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
       timeMs: finalTime,
     );
 
-    _showMessage('${_formatTime(finalTime)} 秒 を記録しました！');
+    // Web版で録画ありの場合: 「録画を確認」ボタン付きメッセージ
+    if (kIsWeb && hadRecording && WebCameraService.hasPendingRecording()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_formatTime(finalTime)} 秒 を記録しました！'),
+          duration: const Duration(seconds: 10),
+          action: SnackBarAction(
+            label: '録画を確認',
+            textColor: Colors.yellow,
+            onPressed: () {
+              WebCameraService.showPendingRecording();
+            },
+          ),
+        ),
+      );
+    } else {
+      _showMessage('${_formatTime(finalTime)} 秒 を記録しました！');
+    }
   }
 
   /// チームモードでゴール
