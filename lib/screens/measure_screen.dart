@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:audioplayers/audioplayers.dart';
@@ -189,7 +190,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     }
   }
 
-  /// 録画停止・保存
+  /// 録画停止・保存（Downloadsフォルダにコピー）
   Future<void> _stopVideoRecording() async {
     if (_cameraController == null || !_cameraController!.value.isRecordingVideo) {
       setState(() => _isVideoRecording = false);
@@ -197,15 +198,55 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     }
 
     try {
-      final file = await _cameraController!.stopVideoRecording();
-      setState(() {
-        _isVideoRecording = false;
-        _lastVideoPath = file.path;
-      });
-      _showMessage('動画を保存しました');
+      final xFile = await _cameraController!.stopVideoRecording();
+      setState(() => _isVideoRecording = false);
+
+      // 永続的な場所にコピー
+      final savedPath = await _saveVideoToStorage(xFile.path);
+      setState(() => _lastVideoPath = savedPath);
+      _showMessage('動画を保存しました: ${savedPath.split('/').last}');
     } catch (e) {
       debugPrint('録画停止エラー: $e');
       setState(() => _isVideoRecording = false);
+      _showMessage('動画の保存に失敗しました');
+    }
+  }
+
+  /// 動画ファイルを永続ストレージに保存
+  Future<String> _saveVideoToStorage(String tempPath) async {
+    if (kIsWeb) return tempPath;
+
+    try {
+      // アプリ固有のドキュメントフォルダに保存
+      final appDir = await getApplicationDocumentsDirectory();
+      final videoDir = Directory('${appDir.path}/videos');
+      if (!await videoDir.exists()) {
+        await videoDir.create(recursive: true);
+      }
+
+      // ファイル名を生成
+      final now = DateTime.now();
+      final dateStr = '${now.year}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}'
+          '${now.second.toString().padLeft(2, '0')}';
+      final ext = tempPath.split('.').last;
+      final savePath = '${videoDir.path}/runbike_$dateStr.$ext';
+
+      // コピー
+      final tempFile = File(tempPath);
+      await tempFile.copy(savePath);
+      debugPrint('動画保存先: $savePath');
+
+      // 一時ファイルを削除
+      try { await tempFile.delete(); } catch (_) {}
+
+      return savePath;
+    } catch (e) {
+      debugPrint('動画保存エラー: $e');
+      return tempPath; // フォールバック: 一時パスをそのまま返す
     }
   }
 
