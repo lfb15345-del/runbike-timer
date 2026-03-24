@@ -69,6 +69,13 @@ class WebCameraService {
     }
   }
 
+  /// カメラプレビューの表示/非表示（タブ切替時）
+  static void setPreviewVisible(bool visible) {
+    try {
+      globalContext.callMethod('setCameraPreviewVisible'.toJS, visible.toJS);
+    } catch (_) {}
+  }
+
   /// 保留中の録画プレビューを表示
   static bool showPendingRecording() {
     try {

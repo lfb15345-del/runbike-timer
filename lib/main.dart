@@ -6,6 +6,7 @@ import 'screens/analysis_screen.dart';
 import 'screens/course_screen.dart';
 import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
+import 'services/web_camera_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -170,6 +171,10 @@ class _HomePageState extends State<HomePage> {
         ),
       );
       return;
+    }
+    // Web版: 計測タブ以外ではカメラプレビューを非表示
+    if (kIsWeb) {
+      WebCameraService.setPreviewVisible(index == 0);
     }
     setState(() => _currentIndex = index);
   }

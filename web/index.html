@@ -644,6 +644,13 @@
       }
     }
 
+    // カメラプレビューの表示/非表示（タブ切替時に使用）
+    function setCameraPreviewVisible(visible) {
+      if (_cameraVideo) {
+        _cameraVideo.style.display = visible ? '' : 'none';
+      }
+    }
+
     // カメラが利用可能か確認
     function isCameraAvailable() {
       return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
