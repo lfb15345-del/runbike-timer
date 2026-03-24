@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/runbike-timer/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="ランバイク練習・タイム計測アプリ">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ランバイクタイマー">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- 日本語フォント（Google Fonts: Noto Sans JP） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>ランバイクタイマー</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+
+  <!-- ランバイクタイマー Web Audio API（WAVファイルに依存しない音声生成） -->
+  <script>
+    // グローバルAudioContext（全音声で共有）
+    var _audioCtx = null;
+    var _masterOutput = null;       // マスター出力ノード（全音声の合流点）
+    var _recordingDest = null;      // 録画用のMediaStreamDestination
+    var _micSource = null;          // マイク音声のソースノード
+
+    function getAudioCtx() {
+      if (!_audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        _audioCtx = new AC();
+      }
+      if (_audioCtx.state === 'suspended') _audioCtx.resume();
+      return _audioCtx;
+    }
+
+    // マスター出力ノード（全音声はここを経由→スピーカー＋録画に分岐）
+    function getAudioOutput() {
+      var ctx = getAudioCtx();
+      if (!_masterOutput) {
+        _masterOutput = ctx.createGain();
+        _masterOutput.gain.value = 1.0;
+        _masterOutput.connect(ctx.destination); // スピーカーへ常時接続
+      }
+      return _masterOutput;
+    }
+
+    // 最初のタッチ/クリックで音声解禁
+    function unlockAudio() {
+      var ctx = getAudioCtx();
+      ctx.resume();
+      var buf = ctx.createBuffer(1, 1, 22050);
+      var s = ctx.createBufferSource();
+      s.buffer = buf; s.connect(ctx.destination); s.start(0);
+      document.removeEventListener('touchstart', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    }
+    document.addEventListener('touchstart', unlockAudio, {passive:true});
+    document.addEventListener('click', unlockAudio);
+
+    // --- メトロノーム（クリック音） ---
+    var _metronomeInterval = null;
+    function playTick() {
+      var ctx = getAudioCtx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+      osc.connect(gain); gain.connect(getAudioOutput());
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.03);
+    }
+    function startMetronome(bpm) {
+      stopMetronome();
+      var ms = 60000 / bpm;
+      playTick();
+      _metronomeInterval = setInterval(playTick, ms);
+    }
+    function stopMetronome() {
+      if (_metronomeInterval) { clearInterval(_metronomeInterval); _metronomeInterval = null; }
+    }
+
+    // --- ホイッスル（エアホーン風ブザー） ---
+    function playWhistle() {
+      var ctx = getAudioCtx();
+      var t = ctx.currentTime;
+      var dur = 0.8;
+      var whistleGain = ctx.createGain();
+      whistleGain.gain.setValueAtTime(0, t);
+      whistleGain.gain.linearRampToValueAtTime(0.6, t + 0.02);
+      whistleGain.gain.setValueAtTime(0.6, t + dur - 0.2);
+      whistleGain.gain.linearRampToValueAtTime(0, t + dur);
+      whistleGain.connect(getAudioOutput());
+      // 複数のオシレーターで太い音
+      [220, 330, 440, 277].forEach(function(freq, i) {
+        var osc = ctx.createOscillator();
+        var g = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+        g.gain.value = i === 0 ? 0.3 : 0.15;
+        osc.connect(g); g.connect(whistleGain);
+        osc.start(t); osc.stop(t + dur);
+      });
+    }
+
+    // --- アップテンポBGM（ドラムビート風ループ） ---
+    var _upbeatInterval = null;
+    var _upbeatStep = 0;
+    function _playKick() {
+      var ctx = getAudioCtx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.8, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.connect(gain); gain.connect(getAudioOutput());
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
+    }
+    function _playHihat() {
+      var ctx = getAudioCtx();
+      // ノイズをフィルタリングしてハイハット音
+      var bufSize = ctx.sampleRate * 0.03;
+      var buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      var data = buf.getChannelData(0);
+      for (var i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+      var src = ctx.createBufferSource();
+      src.buffer = buf;
+      var hp = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 7000;
+      var gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      src.connect(hp); hp.connect(gain); gain.connect(getAudioOutput());
+      src.start(ctx.currentTime);
+    }
+    function startUpbeat() {
+      stopUpbeat();
+      _upbeatStep = 0;
+      var bpm = 200;
+      var stepMs = (60000 / bpm) / 2; // 8分音符単位
+      function step() {
+        // キック: 1拍目と3拍目
+        if (_upbeatStep % 4 === 0) _playKick();
+        // ハイハット: 全8分音符
+        _playHihat();
+        _upbeatStep++;
+      }
+      step();
+      _upbeatInterval = setInterval(step, stepMs);
+    }
+    function stopUpbeat() {
+      if (_upbeatInterval) { clearInterval(_upbeatInterval); _upbeatInterval = null; }
+    }
+
+    // --- スタート音（MP3をWeb Audio APIでプリデコード → 即時再生） ---
+    var _soundBuffers = {};
+    var _currentSoundSource = null;
+
+    // MP3ファイルを事前にデコードしてバッファに保持
+    async function preloadSound(filename) {
+      try {
+        var ctx = getAudioCtx();
+        // Flutter Webのアセットパス: assets/assets/sounds/xxx
+        var url = 'assets/assets/sounds/' + filename;
+        var response = await fetch(url);
+        var arrayBuffer = await response.arrayBuffer();
+        _soundBuffers[filename] = await ctx.decodeAudioData(arrayBuffer);
+        console.log('[Audio] Preloaded: ' + filename);
+      } catch(e) {
+        console.error('[Audio] Preload failed: ' + filename, e);
+      }
+    }
+
+    // 複数ファイルを一括プリロード
+    async function preloadAllSounds() {
+      await Promise.all([
+        preloadSound('start01.mp3'),
+        preloadSound('start02.mp3'),
+        preloadSound('start03.mp3')
+      ]);
+      console.log('[Audio] All sounds preloaded:', Object.keys(_soundBuffers));
+    }
+
+    // プリロード済みバッファから即時再生（レイテンシーほぼゼロ）
+    function playSoundBuffer(filename) {
+      stopSoundBuffer();
+      var buffer = _soundBuffers[filename];
+      if (!buffer) {
+        console.warn('[Audio] Not preloaded: ' + filename);
+        return false;
+      }
+      var ctx = getAudioCtx();
+      var source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(getAudioOutput());
+      source.start(0);
+      _currentSoundSource = source;
+      source.onended = function() { _currentSoundSource = null; };
+      return true;
+    }
+
+    // 再生中のスタート音を停止
+    function stopSoundBuffer() {
+      if (_currentSoundSource) {
+        try { _currentSoundSource.stop(); } catch(e) {}
+        _currentSoundSource = null;
+      }
+    }
+
+    // 全音声停止
+    function stopAllSounds() {
+      stopMetronome();
+      stopUpbeat();
+      stopSoundBuffer();
+    }
+
+    // =============================================
+    //  カメラ（プレビュー + 録画 + ダウンロード保存）
+    // =============================================
+    var _cameraStream = null;
+    var _mediaRecorder = null;
+    var _recordedChunks = [];
+    var _cameraVideo = null;
+    var _cameraFacing = 'environment'; // environment=背面, user=前面
+    var _pendingRecording = null; // 保留中の録画データ
+
+    // カメラプレビュー開始（画面右上にPiP表示）
+    async function startCameraPreview() {
+      try {
+        // 既存プレビューがあれば停止
+        stopCameraPreview();
+
+        _cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: _cameraFacing },
+          audio: true
+        });
+
+        _cameraVideo = document.createElement('video');
+        _cameraVideo.srcObject = _cameraStream;
+        _cameraVideo.autoplay = true;
+        _cameraVideo.muted = true;
+        _cameraVideo.playsInline = true;
+        _cameraVideo.style.cssText =
+          'position:fixed;top:8px;right:8px;width:120px;height:160px;' +
+          'border-radius:12px;border:2px solid white;z-index:9999;' +
+          'object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.3);' +
+          'cursor:pointer;';
+
+        // タップで前面/背面切替
+        _cameraVideo.addEventListener('click', function() {
+          switchCamera();
+        });
+
+        document.body.appendChild(_cameraVideo);
+        console.log('[Camera] Preview started');
+        return true;
+      } catch(e) {
+        console.error('[Camera] Preview failed:', e);
+        return false;
+      }
+    }
+
+    // カメラプレビュー停止
+    function stopCameraPreview() {
+      // 録画中なら先に停止
+      if (_mediaRecorder && _mediaRecorder.state === 'recording') {
+        _mediaRecorder.stop();
+      }
+      _cleanupRecordingAudio();
+
+      if (_cameraVideo) {
+        _cameraVideo.remove();
+        _cameraVideo = null;
+      }
+      if (_cameraStream) {
+        _cameraStream.getTracks().forEach(function(t) { t.stop(); });
+        _cameraStream = null;
+      }
+      _mediaRecorder = null;
+      _recordedChunks = [];
+    }
+
+    // 前面/背面カメラ切替
+    async function switchCamera() {
+      var wasRecording = _mediaRecorder && _mediaRecorder.state === 'recording';
+      _cameraFacing = (_cameraFacing === 'environment') ? 'user' : 'environment';
+
+      // ストリームを取り直す
+      try {
+        var newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: _cameraFacing },
+          audio: true
+        });
+
+        // 古いストリームを停止
+        if (_cameraStream) {
+          _cameraStream.getTracks().forEach(function(t) { t.stop(); });
+        }
+        _cameraStream = newStream;
+
+        if (_cameraVideo) {
+          _cameraVideo.srcObject = newStream;
+        }
+
+        // 録画中だった場合は新しいストリームで録画再開
+        if (wasRecording) {
+          startCameraRecording();
+        }
+        console.log('[Camera] Switched to ' + _cameraFacing);
+      } catch(e) {
+        console.error('[Camera] Switch failed:', e);
+      }
+    }
+
+    // 録画用のストリームを作成（音声ミキシング対応、失敗時フォールバック）
+    function _createRecordingStream() {
+      try {
+        var ctx = getAudioCtx();
+        var output = getAudioOutput(); // _masterOutput を確保
+
+        // createMediaStreamDestination がサポートされているか確認
+        if (!ctx.createMediaStreamDestination) {
+          console.warn('[Camera] createMediaStreamDestination not supported, using camera stream directly');
+          return _cameraStream;
+        }
+
+        // 録画用ミックス音声ストリームを作成
+        _recordingDest = ctx.createMediaStreamDestination();
+
+        // アプリ音声（Web Audio API出力）を録画ストリームに接続
+        _masterOutput.connect(_recordingDest);
+
+        // マイク音声も録画ストリームにミックス
+        var micTracks = _cameraStream.getAudioTracks();
+        if (micTracks.length > 0) {
+          var micStream = new MediaStream(micTracks);
+          _micSource = ctx.createMediaStreamSource(micStream);
+          _micSource.connect(_recordingDest);
+        }
+
+        // カメラ映像 + ミックス音声 で合成ストリーム
+        var combinedStream = new MediaStream();
+
+        _cameraStream.getVideoTracks().forEach(function(t) {
+          combinedStream.addTrack(t);
+        });
+
+        var audioTracks = _recordingDest.stream.getAudioTracks();
+        audioTracks.forEach(function(t) {
+          combinedStream.addTrack(t);
+        });
+
+        // 合成ストリームにトラックがあるか確認
+        if (combinedStream.getVideoTracks().length === 0) {
+          console.warn('[Camera] No video tracks in combined stream, falling back');
+          _cleanupRecordingAudio();
+          return _cameraStream;
+        }
+
+        console.log('[Camera] Combined stream: video=' +
+          combinedStream.getVideoTracks().length +
+          ', audio=' + combinedStream.getAudioTracks().length);
+        return combinedStream;
+      } catch(e) {
+        console.warn('[Camera] Audio mixing failed, using camera stream directly:', e);
+        _cleanupRecordingAudio();
+        return _cameraStream;
+      }
+    }
+
+    // 録画開始（カメラ映像 + マイク音声 + アプリ音声をミックス）
+    function startCameraRecording() {
+      if (!_cameraStream) return false;
+      _recordedChunks = [];
+
+      // ストリーム作成（音声ミキシング or フォールバック）
+      var recordStream = _createRecordingStream();
+
+      // MIMEタイプの優先順位
+      var mimeType = 'video/webm';
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+        mimeType = 'video/webm;codecs=vp9,opus';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+        mimeType = 'video/webm;codecs=vp9';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        mimeType = 'video/webm;codecs=vp8';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
+      }
+
+      try {
+        _mediaRecorder = new MediaRecorder(recordStream, { mimeType: mimeType });
+      } catch(e) {
+        console.warn('[Camera] MediaRecorder with mimeType failed, trying without:', e);
+        try {
+          _mediaRecorder = new MediaRecorder(recordStream);
+        } catch(e2) {
+          // 合成ストリームで完全失敗 → カメラストリーム直接で再試行
+          console.warn('[Camera] MediaRecorder with combined stream failed, using camera stream:', e2);
+          _cleanupRecordingAudio();
+          try {
+            _mediaRecorder = new MediaRecorder(_cameraStream);
+          } catch(e3) {
+            console.error('[Camera] All MediaRecorder attempts failed:', e3);
+            return false;
+          }
+        }
+      }
+
+      _mediaRecorder.ondataavailable = function(e) {
+        if (e.data && e.data.size > 0) _recordedChunks.push(e.data);
+      };
+
+      // エラーハンドラー
+      _mediaRecorder.onerror = function(e) {
+        console.error('[Camera] MediaRecorder error:', e);
+      };
+
+      _mediaRecorder.start(1000); // 1秒ごとにチャンク
+
+      // プレビュー枠を赤に
+      if (_cameraVideo) {
+        _cameraVideo.style.border = '3px solid red';
+      }
+      console.log('[Camera] Recording started (' + _mediaRecorder.mimeType + ')');
+      return true;
+    }
+
+    // 録画停止 → プレビュー表示 → 保存 or 破棄
+    function stopCameraRecording() {
+      return new Promise(function(resolve) {
+        if (!_mediaRecorder || _mediaRecorder.state === 'inactive') {
+          _cleanupRecordingAudio();
+          resolve(false);
+          return;
+        }
+
+        _mediaRecorder.onstop = function() {
+          console.log('[Camera] Recording stopped, chunks: ' + _recordedChunks.length);
+
+          if (_recordedChunks.length === 0) {
+            console.warn('[Camera] No recorded data!');
+            _cleanupRecordingAudio();
+            if (_cameraVideo) _cameraVideo.style.border = '2px solid white';
+            resolve(false);
+            return;
+          }
+
+          // Blobを作成
+          var mimeType = _mediaRecorder.mimeType || 'video/webm';
+          var ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          var blob = new Blob(_recordedChunks, { type: mimeType });
+          var blobUrl = URL.createObjectURL(blob);
+          console.log('[Camera] Blob size: ' + blob.size + ' bytes');
+
+          var now = new Date();
+          var dateStr = now.getFullYear() +
+            ('0'+(now.getMonth()+1)).slice(-2) +
+            ('0'+now.getDate()).slice(-2) + '_' +
+            ('0'+now.getHours()).slice(-2) +
+            ('0'+now.getMinutes()).slice(-2) +
+            ('0'+now.getSeconds()).slice(-2);
+          var filename = 'runbike_' + dateStr + '.' + ext;
+
+          // ── プレビューデータを保留（すぐ表示しない → タイム確認後に表示） ──
+          _pendingRecording = {
+            blobUrl: blobUrl,
+            blob: blob,
+            filename: filename,
+            mimeType: mimeType
+          };
+          console.log('[Camera] Recording pending for preview');
+
+          _recordedChunks = [];
+          _cleanupRecordingAudio();
+          if (_cameraVideo) _cameraVideo.style.border = '2px solid white';
+          resolve(true);
+        };
+
+        _mediaRecorder.stop();
+      });
+    }
+
+    // 録画プレビューオーバーレイ
+    function _showVideoPreview(blobUrl, blob, filename, mimeType) {
+      // オーバーレイ背景
+      var overlay = document.createElement('div');
+      overlay.style.cssText =
+        'position:fixed;top:0;left:0;width:100%;height:100%;' +
+        'background:rgba(0,0,0,0.85);z-index:10000;' +
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+      // タイトル
+      var title = document.createElement('div');
+      title.textContent = '録画プレビュー';
+      title.style.cssText = 'color:white;font-size:18px;font-weight:bold;margin-bottom:12px;';
+      overlay.appendChild(title);
+
+      // プレビュー動画
+      var previewVideo = document.createElement('video');
+      previewVideo.src = blobUrl;
+      previewVideo.controls = true;
+      previewVideo.autoplay = true;
+      previewVideo.playsInline = true;
+      previewVideo.style.cssText =
+        'max-width:90%;max-height:55vh;border-radius:12px;' +
+        'background:black;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
+      overlay.appendChild(previewVideo);
+
+      // ファイルサイズ表示
+      var info = document.createElement('div');
+      var sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+      info.textContent = filename + ' (' + sizeMB + 'MB)';
+      info.style.cssText = 'color:#aaa;font-size:13px;margin-top:8px;';
+      overlay.appendChild(info);
+
+      // ボタンコンテナ
+      var buttons = document.createElement('div');
+      buttons.style.cssText = 'display:flex;gap:16px;margin-top:20px;';
+
+      // 破棄ボタン
+      var discardBtn = document.createElement('button');
+      discardBtn.textContent = '破棄する';
+      discardBtn.style.cssText =
+        'padding:14px 32px;font-size:18px;font-weight:bold;border:none;border-radius:12px;' +
+        'background:#555;color:white;cursor:pointer;min-width:130px;';
+      discardBtn.onclick = function() {
+        previewVideo.pause();
+        URL.revokeObjectURL(blobUrl);
+        overlay.remove();
+        console.log('[Camera] Recording discarded');
+      };
+      buttons.appendChild(discardBtn);
+
+      // 保存ボタン
+      var saveBtn = document.createElement('button');
+      saveBtn.textContent = '保存する';
+      saveBtn.style.cssText =
+        'padding:14px 32px;font-size:18px;font-weight:bold;border:none;border-radius:12px;' +
+        'background:#4CAF50;color:white;cursor:pointer;min-width:130px;';
+      saveBtn.onclick = function() {
+        previewVideo.pause();
+
+        // ダウンロード実行
+        var a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // モバイル用: Web Share APIでも共有
+        if (navigator.share && navigator.canShare) {
+          setTimeout(function() {
+            try {
+              var file = new File([blob], filename, { type: mimeType });
+              if (navigator.canShare({ files: [file] })) {
+                navigator.share({ files: [file], title: 'ランバイク録画' })
+                  .catch(function() {});
+              }
+            } catch(e) {}
+          }, 300);
+        }
+
+        setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 10000);
+        overlay.remove();
+        console.log('[Camera] Recording saved: ' + filename);
+      };
+      buttons.appendChild(saveBtn);
+
+      overlay.appendChild(buttons);
+      document.body.appendChild(overlay);
+    }
+
+    // 録画用オーディオ接続のクリーンアップ
+    function _cleanupRecordingAudio() {
+      // マスター出力から録画先への接続を切断
+      if (_masterOutput && _recordingDest) {
+        try { _masterOutput.disconnect(_recordingDest); } catch(e) {}
+      }
+      // マイクソースの切断
+      if (_micSource) {
+        try { _micSource.disconnect(); } catch(e) {}
+        _micSource = null;
+      }
+      _recordingDest = null;
+    }
+
+    // 保留中の録画プレビューを表示
+    function showPendingRecording() {
+      if (!_pendingRecording) return false;
+      var rec = _pendingRecording;
+      _pendingRecording = null;
+      _showVideoPreview(rec.blobUrl, rec.blob, rec.filename, rec.mimeType);
+      return true;
+    }
+
+    // 保留中の録画があるか確認
+    function hasPendingRecording() {
+      return !!_pendingRecording;
+    }
+
+    // 保留中の録画を破棄
+    function discardPendingRecording() {
+      if (_pendingRecording) {
+        URL.revokeObjectURL(_pendingRecording.blobUrl);
+        _pendingRecording = null;
+        console.log('[Camera] Pending recording discarded');
+      }
+    }
+
+    // カメラプレビューの表示/非表示（タブ切替時に使用）
+    function setCameraPreviewVisible(visible) {
+      if (_cameraVideo) {
+        _cameraVideo.style.display = visible ? '' : 'none';
+      }
+    }
+
+    // カメラが利用可能か確認
+    function isCameraAvailable() {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    }
+
+    // 録画中かどうか
+    function isCameraRecording() {
+      return _mediaRecorder && _mediaRecorder.state === 'recording';
+    }
+  </script>
+</body>
+</html>
