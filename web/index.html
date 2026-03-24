@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -27,6 +27,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ランバイクタイマー">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- 日本語フォント（Google Fonts: Noto Sans JP） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
@@ -254,6 +259,7 @@
     var _recordedChunks = [];
     var _cameraVideo = null;
     var _cameraFacing = 'environment'; // environment=背面, user=前面
+    var _pendingRecording = null; // 保留中の録画データ
 
     // カメラプレビュー開始（画面右上にPiP表示）
     async function startCameraPreview() {
@@ -495,8 +501,14 @@
             ('0'+now.getSeconds()).slice(-2);
           var filename = 'runbike_' + dateStr + '.' + ext;
 
-          // ── プレビューオーバーレイを表示 ──
-          _showVideoPreview(blobUrl, blob, filename, mimeType);
+          // ── プレビューデータを保留（すぐ表示しない → タイム確認後に表示） ──
+          _pendingRecording = {
+            blobUrl: blobUrl,
+            blob: blob,
+            filename: filename,
+            mimeType: mimeType
+          };
+          console.log('[Camera] Recording pending for preview');
 
           _recordedChunks = [];
           _cleanupRecordingAudio();
@@ -612,6 +624,36 @@
         _micSource = null;
       }
       _recordingDest = null;
+    }
+
+    // 保留中の録画プレビューを表示
+    function showPendingRecording() {
+      if (!_pendingRecording) return false;
+      var rec = _pendingRecording;
+      _pendingRecording = null;
+      _showVideoPreview(rec.blobUrl, rec.blob, rec.filename, rec.mimeType);
+      return true;
+    }
+
+    // 保留中の録画があるか確認
+    function hasPendingRecording() {
+      return !!_pendingRecording;
+    }
+
+    // 保留中の録画を破棄
+    function discardPendingRecording() {
+      if (_pendingRecording) {
+        URL.revokeObjectURL(_pendingRecording.blobUrl);
+        _pendingRecording = null;
+        console.log('[Camera] Pending recording discarded');
+      }
+    }
+
+    // カメラプレビューの表示/非表示（タブ切替時に使用）
+    function setCameraPreviewVisible(visible) {
+      if (_cameraVideo) {
+        _cameraVideo.style.display = visible ? '' : 'none';
+      }
     }
 
     // カメラが利用可能か確認

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:gallery_saver_plus/gallery_saver.dart';
 import '../services/database_service.dart';
 import '../services/web_audio_service.dart';
 import '../services/web_camera_service.dart';
@@ -201,10 +202,14 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
       final xFile = await _cameraController!.stopVideoRecording();
       setState(() => _isVideoRecording = false);
 
-      // 永続的な場所にコピー
+      // ギャラリー（写真アプリ）に保存
       final savedPath = await _saveVideoToStorage(xFile.path);
       setState(() => _lastVideoPath = savedPath);
-      _showMessage('動画を保存しました: ${savedPath.split('/').last}');
+      if (savedPath == 'gallery') {
+        _showMessage('動画を写真アプリに保存しました');
+      } else {
+        _showMessage('動画を保存しました: ${savedPath.split('/').last}');
+      }
     } catch (e) {
       debugPrint('録画停止エラー: $e');
       setState(() => _isVideoRecording = false);
@@ -212,19 +217,34 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     }
   }
 
-  /// 動画ファイルを永続ストレージに保存
+  /// 動画ファイルを写真アプリ（ギャラリー）に保存
   Future<String> _saveVideoToStorage(String tempPath) async {
     if (kIsWeb) return tempPath;
 
     try {
-      // アプリ固有のドキュメントフォルダに保存
+      // ギャラリー（写真アプリ）に保存
+      final success = await GallerySaver.saveVideo(
+        tempPath,
+        albumName: 'ランバイクタイマー',
+      );
+
+      if (success == true) {
+        debugPrint('動画をギャラリーに保存しました');
+        // 一時ファイルを削除
+        try { await File(tempPath).delete(); } catch (_) {}
+        return 'gallery'; // ギャラリー保存成功
+      }
+    } catch (e) {
+      debugPrint('ギャラリー保存エラー: $e');
+    }
+
+    // フォールバック: アプリ固有フォルダに保存
+    try {
       final appDir = await getApplicationDocumentsDirectory();
       final videoDir = Directory('${appDir.path}/videos');
       if (!await videoDir.exists()) {
         await videoDir.create(recursive: true);
       }
-
-      // ファイル名を生成
       final now = DateTime.now();
       final dateStr = '${now.year}'
           '${now.month.toString().padLeft(2, '0')}'
@@ -234,19 +254,14 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
           '${now.second.toString().padLeft(2, '0')}';
       final ext = tempPath.split('.').last;
       final savePath = '${videoDir.path}/runbike_$dateStr.$ext';
-
-      // コピー
       final tempFile = File(tempPath);
       await tempFile.copy(savePath);
-      debugPrint('動画保存先: $savePath');
-
-      // 一時ファイルを削除
+      debugPrint('動画保存先（フォールバック）: $savePath');
       try { await tempFile.delete(); } catch (_) {}
-
       return savePath;
     } catch (e) {
       debugPrint('動画保存エラー: $e');
-      return tempPath; // フォールバック: 一時パスをそのまま返す
+      return tempPath;
     }
   }
 
@@ -346,9 +361,24 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     // 録画中なら停止
     if (_isVideoRecording) {
       if (kIsWeb) {
-        // Web版: 録画停止 → 自動ダウンロード
         WebCameraService.stopRecording().then((_) {
-          _showMessage('録画をダウンロードしました');
+          // 録画データがあれば確認ボタン付きで表示
+          if (WebCameraService.hasPendingRecording()) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('中止しました'),
+                duration: const Duration(seconds: 10),
+                action: SnackBarAction(
+                  label: '録画を確認',
+                  textColor: Colors.yellow,
+                  onPressed: () {
+                    WebCameraService.showPendingRecording();
+                  },
+                ),
+              ),
+            );
+          }
         });
       } else {
         _stopVideoRecording();
@@ -370,11 +400,11 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     final finalTime = DateTime.now().difference(_measureStartTime!).inMilliseconds;
     _timer?.cancel();
 
-    // 録画中なら停止
+    // 録画中なら停止（プレビューはまだ出さない）
+    final hadRecording = _isVideoRecording;
     if (_isVideoRecording) {
       if (kIsWeb) {
         await WebCameraService.stopRecording();
-        _showMessage('録画をダウンロードしました');
       } else {
         await _stopVideoRecording();
       }
@@ -404,7 +434,25 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
       timeMs: finalTime,
     );
 
-    _showMessage('${_formatTime(finalTime)} 秒 を記録しました！');
+    // Web版で録画ありの場合: 「録画を確認」ボタン付きメッセージ
+    if (kIsWeb && hadRecording && WebCameraService.hasPendingRecording()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_formatTime(finalTime)} 秒 を記録しました！'),
+          duration: const Duration(seconds: 10),
+          action: SnackBarAction(
+            label: '録画を確認',
+            textColor: Colors.yellow,
+            onPressed: () {
+              WebCameraService.showPendingRecording();
+            },
+          ),
+        ),
+      );
+    } else {
+      _showMessage('${_formatTime(finalTime)} 秒 を記録しました！');
+    }
   }
 
   /// チームモードでゴール

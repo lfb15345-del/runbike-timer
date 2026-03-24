@@ -6,6 +6,7 @@ import 'screens/analysis_screen.dart';
 import 'screens/course_screen.dart';
 import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
+import 'services/web_camera_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,12 +20,17 @@ class RunbikeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 日本語フォント（Web: Google Fonts Noto Sans JP、Android: システムフォント）
+    const japaneseFontFamily = 'Noto Sans JP';
+
     return MaterialApp(
       title: 'ランバイクタイマー',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('ja', 'JP'),
       theme: ThemeData(
         colorSchemeSeed: Colors.green,
         useMaterial3: true,
+        fontFamily: japaneseFontFamily,
       ),
       // Web版は音声解禁画面を最初に表示
       home: kIsWeb ? const WebAudioUnlockScreen() : const HomePage(),
@@ -170,6 +176,10 @@ class _HomePageState extends State<HomePage> {
         ),
       );
       return;
+    }
+    // Web版: 計測タブ以外ではカメラプレビューを非表示
+    if (kIsWeb) {
+      WebCameraService.setPreviewVisible(index == 0);
     }
     setState(() => _currentIndex = index);
   }

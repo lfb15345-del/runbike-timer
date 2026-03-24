@@ -7,4 +7,7 @@ class WebCameraService {
   static bool startRecording() => false;
   static Future<bool> stopRecording() async => false;
   static bool isRecording() => false;
+  static void setPreviewVisible(bool visible) {}
+  static bool showPendingRecording() => false;
+  static bool hasPendingRecording() => false;
 }

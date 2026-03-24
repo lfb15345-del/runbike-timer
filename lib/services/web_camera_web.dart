@@ -68,4 +68,31 @@ class WebCameraService {
       return false;
     }
   }
+
+  /// カメラプレビューの表示/非表示（タブ切替時）
+  static void setPreviewVisible(bool visible) {
+    try {
+      globalContext.callMethod('setCameraPreviewVisible'.toJS, visible.toJS);
+    } catch (_) {}
+  }
+
+  /// 保留中の録画プレビューを表示
+  static bool showPendingRecording() {
+    try {
+      final result = globalContext.callMethod('showPendingRecording'.toJS);
+      return result?.dartify() == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 保留中の録画があるか確認
+  static bool hasPendingRecording() {
+    try {
+      final result = globalContext.callMethod('hasPendingRecording'.toJS);
+      return result?.dartify() == true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
