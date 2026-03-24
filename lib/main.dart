@@ -20,12 +20,17 @@ class RunbikeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 日本語フォント（Web: Google Fonts Noto Sans JP、Android: システムフォント）
+    const japaneseFontFamily = 'Noto Sans JP';
+
     return MaterialApp(
       title: 'ランバイクタイマー',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('ja', 'JP'),
       theme: ThemeData(
         colorSchemeSeed: Colors.green,
         useMaterial3: true,
+        fontFamily: japaneseFontFamily,
       ),
       // Web版は音声解禁画面を最初に表示
       home: kIsWeb ? const WebAudioUnlockScreen() : const HomePage(),
