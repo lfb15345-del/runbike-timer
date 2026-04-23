@@ -535,22 +535,143 @@
       title.style.cssText = 'color:white;font-size:18px;font-weight:bold;margin-bottom:12px;';
       overlay.appendChild(title);
 
-      // プレビュー動画
+      // ── プレビュー動画（ズーム＆パン対応コンテナ） ──
+      var videoContainer = document.createElement('div');
+      videoContainer.style.cssText =
+        'position:relative;width:95%;max-width:760px;height:60vh;' +
+        'overflow:hidden;border-radius:12px;background:black;' +
+        'box-shadow:0 4px 20px rgba(0,0,0,0.5);' +
+        'touch-action:none;';
+
       var previewVideo = document.createElement('video');
       previewVideo.src = blobUrl;
       previewVideo.controls = true;
       previewVideo.autoplay = true;
       previewVideo.playsInline = true;
       previewVideo.style.cssText =
-        'max-width:90%;max-height:55vh;border-radius:12px;' +
-        'background:black;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
-      overlay.appendChild(previewVideo);
+        'width:100%;height:100%;display:block;object-fit:contain;' +
+        'transform-origin:center center;' +
+        'transition:transform 0.05s linear;';
+      videoContainer.appendChild(previewVideo);
 
-      // ファイルサイズ表示
+      // ── ズーム操作ボタン（右下に重ねて表示） ──
+      var zoomBar = document.createElement('div');
+      zoomBar.style.cssText =
+        'position:absolute;right:8px;bottom:54px;display:flex;gap:6px;' +
+        'background:rgba(0,0,0,0.55);padding:6px 8px;border-radius:20px;' +
+        'pointer-events:auto;';
+
+      function makeZoomBtn(label) {
+        var b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText =
+          'width:34px;height:34px;border-radius:50%;border:none;' +
+          'background:rgba(255,255,255,0.15);color:white;font-size:18px;' +
+          'font-weight:bold;cursor:pointer;line-height:1;';
+        return b;
+      }
+      var btnOut = makeZoomBtn('−');
+      var btnReset = makeZoomBtn('⤢');
+      var btnIn = makeZoomBtn('+');
+      zoomBar.appendChild(btnOut);
+      zoomBar.appendChild(btnReset);
+      zoomBar.appendChild(btnIn);
+      videoContainer.appendChild(zoomBar);
+
+      overlay.appendChild(videoContainer);
+
+      // ── ズーム＆パン状態 ──
+      var zoomState = { scale:1, panX:0, panY:0, lastDist:0 };
+      var activePointers = new Map();
+
+      function applyTransform() {
+        previewVideo.style.transform =
+          'translate(' + zoomState.panX + 'px,' + zoomState.panY + 'px) ' +
+          'scale(' + zoomState.scale + ')';
+      }
+      function setScale(newScale, focalX, focalY) {
+        var prev = zoomState.scale;
+        var s = Math.max(1, Math.min(5, newScale));
+        // ズーム中心を考慮したパン補正
+        if (focalX != null && focalY != null) {
+          var rect = videoContainer.getBoundingClientRect();
+          var cx = focalX - rect.left - rect.width / 2;
+          var cy = focalY - rect.top - rect.height / 2;
+          zoomState.panX = (zoomState.panX - cx) * (s / prev) + cx;
+          zoomState.panY = (zoomState.panY - cy) * (s / prev) + cy;
+        }
+        zoomState.scale = s;
+        if (s <= 1.001) { zoomState.panX = 0; zoomState.panY = 0; }
+        applyTransform();
+      }
+      function resetZoom() { zoomState = { scale:1, panX:0, panY:0, lastDist:0 }; applyTransform(); }
+
+      // ── ボタン操作 ──
+      btnIn.onclick = function(e) { e.stopPropagation(); setScale(zoomState.scale * 1.4); };
+      btnOut.onclick = function(e) { e.stopPropagation(); setScale(zoomState.scale / 1.4); };
+      btnReset.onclick = function(e) { e.stopPropagation(); resetZoom(); };
+
+      // ── ピンチズーム＆ドラッグパン ──
+      videoContainer.addEventListener('pointerdown', function(e) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activePointers.size >= 2) {
+          try { videoContainer.setPointerCapture(e.pointerId); } catch(_) {}
+        }
+      });
+      videoContainer.addEventListener('pointermove', function(e) {
+        if (!activePointers.has(e.pointerId)) return;
+        var prev = activePointers.get(e.pointerId);
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (activePointers.size >= 2) {
+          // ピンチズーム
+          var pts = Array.from(activePointers.values());
+          var dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          var midX = (pts[0].x + pts[1].x) / 2;
+          var midY = (pts[0].y + pts[1].y) / 2;
+          if (zoomState.lastDist > 0) {
+            var factor = dist / zoomState.lastDist;
+            setScale(zoomState.scale * factor, midX, midY);
+          }
+          zoomState.lastDist = dist;
+          e.preventDefault();
+        } else if (activePointers.size === 1 && zoomState.scale > 1.01) {
+          // 1本指でパン（ズーム中のみ）
+          zoomState.panX += e.clientX - prev.x;
+          zoomState.panY += e.clientY - prev.y;
+          applyTransform();
+          e.preventDefault();
+        }
+      });
+      function onPointerEnd(e) {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) zoomState.lastDist = 0;
+      }
+      videoContainer.addEventListener('pointerup', onPointerEnd);
+      videoContainer.addEventListener('pointercancel', onPointerEnd);
+      videoContainer.addEventListener('pointerleave', onPointerEnd);
+
+      // ── ダブルタップでズームトグル ──
+      videoContainer.addEventListener('dblclick', function(e) {
+        if (zoomState.scale > 1.05) resetZoom();
+        else setScale(2.0, e.clientX, e.clientY);
+        e.preventDefault();
+      });
+
+      // ── マウスホイールでズーム（PC用） ──
+      videoContainer.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var factor = e.deltaY < 0 ? 1.15 : 0.87;
+        setScale(zoomState.scale * factor, e.clientX, e.clientY);
+      }, { passive: false });
+
+      // ファイルサイズ＆操作ヒント
       var info = document.createElement('div');
       var sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-      info.textContent = filename + ' (' + sizeMB + 'MB)';
-      info.style.cssText = 'color:#aaa;font-size:13px;margin-top:8px;';
+      info.innerHTML = filename + ' (' + sizeMB + 'MB)<br>' +
+        '<span style="font-size:11px;color:#888;">' +
+        '指2本でピンチ / ダブルタップで拡大 / ボタンでも操作可</span>';
+      info.style.cssText = 'color:#aaa;font-size:13px;margin-top:8px;text-align:center;line-height:1.4;';
       overlay.appendChild(info);
 
       // ボタンコンテナ
