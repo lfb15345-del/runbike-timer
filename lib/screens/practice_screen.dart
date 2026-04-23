@@ -29,7 +29,8 @@ class _PracticeScreenState extends State<PracticeScreen>
   int _totalRounds = 8;
 
   // --- BGM設定 ---
-  String _bgmType = 'none'; // none, metronome, upbeat
+  // デフォルトはアップテンポBGM（走行中の盛り上げと、沈黙を感じさせないため）
+  String _bgmType = 'upbeat'; // none, metronome, upbeat
   int _metronomeBpm = 180;
   Timer? _metronomeTimer;
 
