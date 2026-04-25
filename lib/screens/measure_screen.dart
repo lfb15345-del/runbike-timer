@@ -6,7 +6,6 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:gallery_saver_plus/gallery_saver.dart';
-import 'package:video_player/video_player.dart';
 import '../services/database_service.dart';
 import '../services/web_audio_service.dart';
 import '../services/web_camera_service.dart';
@@ -71,6 +70,12 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   bool _isCameraInitialized = false;
   bool _isVideoRecording = false;
   String? _lastVideoPath;
+
+  // カメラのデジタルズーム関連
+  double _camMinZoom = 1.0;
+  double _camMaxZoom = 1.0;
+  double _camZoom = 1.0;            // 現在のズーム倍率
+  double _camZoomStart = 1.0;       // ピンチ開始時のズーム倍率（差分計算用）
 
   // チームモード
   final Map<int, int> _teamFinished = {};
@@ -159,11 +164,32 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
     try {
       await _cameraController!.initialize();
+      // ズーム範囲を取得（端末によって異なる、典型: 1.0〜8.0）
+      try {
+        _camMinZoom = await _cameraController!.getMinZoomLevel();
+        _camMaxZoom = await _cameraController!.getMaxZoomLevel();
+        _camZoom = _camMinZoom;
+        debugPrint('カメラズーム範囲: $_camMinZoom 〜 $_camMaxZoom');
+      } catch (e) {
+        debugPrint('ズーム範囲取得エラー: $e');
+      }
       if (mounted) {
         setState(() => _isCameraInitialized = true);
       }
     } catch (e) {
       debugPrint('カメラ初期化エラー: $e');
+    }
+  }
+
+  /// カメラのデジタルズームを適用（ピンチ操作から呼ぶ）
+  Future<void> _applyCameraZoom(double zoom) async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+    final clamped = zoom.clamp(_camMinZoom, _camMaxZoom);
+    try {
+      await _cameraController!.setZoomLevel(clamped);
+      if (mounted) setState(() => _camZoom = clamped);
+    } catch (e) {
+      debugPrint('ズーム設定エラー: $e');
     }
   }
 
@@ -192,7 +218,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     }
   }
 
-  /// 録画停止 → プレビュー（保存/破棄はプレビュー内で選択）
+  /// 録画停止 → 自動でギャラリーに保存
   Future<void> _stopVideoRecording() async {
     if (_cameraController == null || !_cameraController!.value.isRecordingVideo) {
       setState(() => _isVideoRecording = false);
@@ -203,83 +229,17 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
       final xFile = await _cameraController!.stopVideoRecording();
       setState(() => _isVideoRecording = false);
 
-      // ── プレビューポップアップを表示（ピンチズーム対応） ──
-      // 即時保存はせず、ユーザーに「保存する/破棄する」を選んでもらう
-      if (mounted) {
-        await _showVideoPreviewPopup(xFile.path);
+      final savedPath = await _saveVideoToStorage(xFile.path);
+      setState(() => _lastVideoPath = savedPath);
+      if (savedPath == 'gallery') {
+        _showMessage('動画を写真アプリに保存しました');
       } else {
-        // 画面が消えていたら自動保存にフォールバック
-        await _saveVideoToStorage(xFile.path);
+        _showMessage('動画を保存しました: ${savedPath.split('/').last}');
       }
     } catch (e) {
       debugPrint('録画停止エラー: $e');
       setState(() => _isVideoRecording = false);
       _showMessage('動画の保存に失敗しました');
-    }
-  }
-
-  /// 録画プレビューのポップアップ（ピンチズーム＆パン対応）
-  Future<void> _showVideoPreviewPopup(String tempPath) async {
-    debugPrint('プレビュー表示開始: $tempPath');
-
-    // ファイルが存在するか確認
-    final file = File(tempPath);
-    if (!await file.exists()) {
-      debugPrint('録画ファイルが見つかりません: $tempPath');
-      _showMessage('録画ファイルが見つかりません');
-      return;
-    }
-
-    final controller = VideoPlayerController.file(file);
-    String? initError;
-    try {
-      await controller.initialize();
-      await controller.setLooping(true);
-      await controller.play();
-      debugPrint('動画初期化OK: ${controller.value.size}, ${controller.value.duration}');
-    } catch (e) {
-      debugPrint('動画読み込みエラー: $e');
-      initError = e.toString();
-    }
-
-    if (!mounted) {
-      await controller.dispose();
-      return;
-    }
-
-    final saveAction = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => PopScope(
-        canPop: false, // バックボタンで誤って閉じないように
-        child: Dialog(
-          backgroundColor: Colors.black87,
-          insetPadding: const EdgeInsets.all(8),
-          child: _VideoPreviewContent(
-            controller: controller,
-            initError: initError,
-            onSave: () => Navigator.pop(dialogCtx, 'save'),
-            onDiscard: () => Navigator.pop(dialogCtx, 'discard'),
-          ),
-        ),
-      ),
-    );
-
-    await controller.pause();
-    await controller.dispose();
-
-    if (saveAction == 'save') {
-      final savedPath = await _saveVideoToStorage(tempPath);
-      if (mounted) setState(() => _lastVideoPath = savedPath);
-      if (savedPath == 'gallery') {
-        _showMessage('動画を写真アプリに保存しました');
-      } else if (savedPath.isNotEmpty) {
-        _showMessage('動画を保存しました');
-      }
-    } else {
-      // 破棄：一時ファイルを削除
-      try { await File(tempPath).delete(); } catch (_) {}
-      _showMessage('録画を破棄しました');
     }
   }
 
@@ -744,17 +704,28 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   }
 
   /// カメラプレビューウィジェット（ワイプ表示）
+  /// - シングルタップ → 前面/背面カメラ切替
+  /// - 指2本でピンチ → カメラのデジタルズーム
+  /// - 表示サイズはピンチ倍率に応じて拡大（ズーム中は大きく見える）
   Widget _buildCameraPreview() {
     if (!_isCameraInitialized || _cameraController == null) {
       return const SizedBox.shrink();
     }
 
+    // ワイプの表示サイズ（ズーム時は少し大きくして見やすく）
+    const baseW = 120.0;
+    const baseH = 160.0;
+    // カメラズーム倍率に連動してワイプ表示も少し拡大（最大2倍まで）
+    final wipeScale = (1.0 + (_camZoom - _camMinZoom) * 0.2).clamp(1.0, 2.0);
+    final w = baseW * wipeScale;
+    final h = baseH * wipeScale;
+
     return Positioned(
       top: 8,
       right: 8,
       child: GestureDetector(
+        // シングルタップ: 前面/背面切替
         onTap: () {
-          // タップで前面/背面カメラ切替
           if (_cameras != null && _cameras!.length > 1) {
             final currentDirection = _cameraController!.description.lensDirection;
             final newCamera = _cameras!.firstWhere(
@@ -767,14 +738,32 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
               ResolutionPreset.medium,
               enableAudio: true,
             );
-            _cameraController!.initialize().then((_) {
+            _cameraController!.initialize().then((_) async {
+              // ズーム範囲を再取得
+              try {
+                _camMinZoom = await _cameraController!.getMinZoomLevel();
+                _camMaxZoom = await _cameraController!.getMaxZoomLevel();
+                _camZoom = _camMinZoom;
+              } catch (_) {}
               if (mounted) setState(() {});
             });
           }
         },
+        // ピンチ開始: 現在のズーム倍率を記憶
+        onScaleStart: (_) {
+          _camZoomStart = _camZoom;
+        },
+        // ピンチ更新: 倍率に応じてカメラズームを変更
+        onScaleUpdate: (details) {
+          // pointerCount が2以上の時だけ反応（タップは無視）
+          if (details.pointerCount >= 2) {
+            final newZoom = _camZoomStart * details.scale;
+            _applyCameraZoom(newZoom);
+          }
+        },
         child: Container(
-          width: 120,
-          height: 160,
+          width: w,
+          height: h,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
@@ -791,9 +780,77 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: CameraPreview(_cameraController!),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CameraPreview(_cameraController!),
+
+                // ── ズーム倍率インジケータ（左下） ──
+                Positioned(
+                  left: 4,
+                  bottom: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.zoom_in,
+                            color: Colors.white, size: 12),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${_camZoom.toStringAsFixed(1)}x',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ── +/- ボタン（右下、確実な操作用） ──
+                Positioned(
+                  right: 2,
+                  bottom: 2,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _zoomBtn(Icons.add, () {
+                        _applyCameraZoom(_camZoom + 0.5);
+                      }),
+                      const SizedBox(height: 2),
+                      _zoomBtn(Icons.remove, () {
+                        _applyCameraZoom(_camZoom - 0.5);
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// ズームボタン（小さい円形ボタン）
+  Widget _zoomBtn(IconData icon, VoidCallback onPressed) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.65),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 14),
       ),
     );
   }
@@ -1140,312 +1197,3 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   }
 }
 
-// ============================================================
-//  録画プレビュー本体（ピンチズーム＆パン対応）
-//  InteractiveViewer を使うと標準でピンチイン/アウト＆ドラッグパンが効く
-// ============================================================
-class _VideoPreviewContent extends StatefulWidget {
-  final VideoPlayerController controller;
-  final String? initError;
-  final VoidCallback onSave;
-  final VoidCallback onDiscard;
-
-  const _VideoPreviewContent({
-    required this.controller,
-    this.initError,
-    required this.onSave,
-    required this.onDiscard,
-  });
-
-  @override
-  State<_VideoPreviewContent> createState() => _VideoPreviewContentState();
-}
-
-class _VideoPreviewContentState extends State<_VideoPreviewContent> {
-  // InteractiveViewer のズーム制御用
-  final TransformationController _transformCtrl = TransformationController();
-
-  bool _isPlaying = true;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onControllerUpdate);
-  }
-
-  void _onControllerUpdate() {
-    if (!mounted) return;
-    // controller の状態が変わったら必ず再ビルド（再生状態・初期化状態・再生位置など）
-    setState(() {
-      _isPlaying = widget.controller.value.isPlaying;
-    });
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onControllerUpdate);
-    _transformCtrl.dispose();
-    super.dispose();
-  }
-
-  /// 現在のスケール値を取得
-  double get _currentScale => _transformCtrl.value.getMaxScaleOnAxis();
-
-  /// ズームイン
-  void _zoomIn() {
-    final current = _currentScale;
-    final next = (current * 1.5).clamp(1.0, 5.0);
-    _transformCtrl.value = Matrix4.identity()..scale(next);
-  }
-
-  /// ズームアウト
-  void _zoomOut() {
-    final current = _currentScale;
-    final next = (current / 1.5).clamp(1.0, 5.0);
-    if (next <= 1.01) {
-      _transformCtrl.value = Matrix4.identity();
-    } else {
-      _transformCtrl.value = Matrix4.identity()..scale(next);
-    }
-  }
-
-  /// ズームをリセット
-  void _resetZoom() {
-    _transformCtrl.value = Matrix4.identity();
-  }
-
-  /// 再生/一時停止トグル
-  void _togglePlay() {
-    if (widget.controller.value.isPlaying) {
-      widget.controller.pause();
-    } else {
-      widget.controller.play();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final initialized = widget.controller.value.isInitialized;
-    final aspect = initialized
-        ? widget.controller.value.aspectRatio
-        : 16 / 9;
-    final duration = widget.controller.value.duration;
-    // 画面サイズに基づいた動画エリアの固定サイズ（Stackは固定サイズが必要）
-    final screen = MediaQuery.of(context).size;
-    final videoAreaHeight = (screen.height * 0.5).clamp(220.0, 480.0);
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 760),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── タイトル ──
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.movie, color: Colors.white70, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  '録画プレビュー',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── 動画本体（ピンチ＆パン対応） ──
-          // ※ InteractiveViewer の pinch/pan を邪魔しないように
-          //   tap 検出は GestureDetector で「内側に」配置する
-          SizedBox(
-            width: double.infinity,
-            height: videoAreaHeight,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // 黒背景
-                Container(color: Colors.black),
-
-                // ズーム&パン領域（InteractiveViewerは Stack の最下層）
-                Positioned.fill(
-                  child: ClipRect(
-                    child: InteractiveViewer(
-                      transformationController: _transformCtrl,
-                      minScale: 1.0,
-                      maxScale: 5.0,
-                      panEnabled: true,
-                      scaleEnabled: true,
-                      // tap は InteractiveViewer の child として登録 →
-                      // ピンチ(2本指)とは競合せず、単タップだけ拾える
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _togglePlay,
-                        child: Center(
-                          child: widget.initError != null
-                              ? Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.error_outline,
-                                          color: Colors.white70, size: 40),
-                                      const SizedBox(height: 8),
-                                      const Text('動画を再生できません',
-                                          style: TextStyle(color: Colors.white)),
-                                      const SizedBox(height: 4),
-                                      Text(widget.initError!,
-                                          style: const TextStyle(
-                                              color: Colors.white38, fontSize: 11),
-                                          textAlign: TextAlign.center),
-                                    ],
-                                  ),
-                                )
-                              : initialized
-                                  ? AspectRatio(
-                                      aspectRatio: aspect,
-                                      child: VideoPlayer(widget.controller),
-                                    )
-                                  : const Padding(
-                                      padding: EdgeInsets.all(24),
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── 中央の再生/一時停止アイコン ──
-                if (initialized)
-                  IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: _isPlaying ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow,
-                          size: 50,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // ── 右上のズームボタン ──
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.zoom_out, color: Colors.white),
-                          tooltip: 'ズームアウト',
-                          onPressed: _zoomOut,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.fit_screen, color: Colors.white),
-                          tooltip: '元のサイズ',
-                          onPressed: _resetZoom,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.zoom_in, color: Colors.white),
-                          tooltip: 'ズームイン',
-                          onPressed: _zoomIn,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── シークバー ──
-          if (initialized && duration.inMilliseconds > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: VideoProgressIndicator(
-                widget.controller,
-                allowScrubbing: true,
-                colors: const VideoProgressColors(
-                  playedColor: Colors.green,
-                  bufferedColor: Colors.white24,
-                  backgroundColor: Colors.white12,
-                ),
-              ),
-            ),
-
-          // ── 操作ヒント ──
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Text(
-              '指2本でピンチ拡大 / タップで再生・一時停止',
-              style: TextStyle(color: Colors.white54, fontSize: 11),
-              textAlign: TextAlign.center,
-            ),
-          ),
-
-          // ── 保存/破棄ボタン ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onDiscard,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('破棄する'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey[700],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onSave,
-                    icon: const Icon(Icons.save_alt),
-                    label: const Text('保存する'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
