@@ -77,6 +77,10 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   double _camZoom = 1.0;            // 現在のズーム倍率
   double _camZoomStart = 1.0;       // ピンチ開始時のズーム倍率（差分計算用）
 
+  // ピンチ検出用：アクティブなタッチポインタを追跡（Listener使用）
+  final Map<int, Offset> _wipePointers = {};
+  double _wipePinchInitDist = 0;
+
   // チームモード
   final Map<int, int> _teamFinished = {};
 
@@ -723,45 +727,65 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     return Positioned(
       top: 8,
       right: 8,
-      child: GestureDetector(
-        // シングルタップ: 前面/背面切替
-        onTap: () {
-          if (_cameras != null && _cameras!.length > 1) {
-            final currentDirection = _cameraController!.description.lensDirection;
-            final newCamera = _cameras!.firstWhere(
-              (c) => c.lensDirection != currentDirection,
-              orElse: () => _cameras!.first,
-            );
-            _cameraController?.dispose();
-            _cameraController = CameraController(
-              newCamera,
-              ResolutionPreset.medium,
-              enableAudio: true,
-            );
-            _cameraController!.initialize().then((_) async {
-              // ズーム範囲を再取得
-              try {
-                _camMinZoom = await _cameraController!.getMinZoomLevel();
-                _camMaxZoom = await _cameraController!.getMaxZoomLevel();
-                _camZoom = _camMinZoom;
-              } catch (_) {}
-              if (mounted) setState(() {});
-            });
+      // Listener は生のポインターイベントを受け取るのでジェスチャー競合の影響なし
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        // 指が触れた瞬間
+        onPointerDown: (e) {
+          _wipePointers[e.pointer] = e.position;
+          if (_wipePointers.length == 2) {
+            final pts = _wipePointers.values.toList();
+            _wipePinchInitDist = (pts[0] - pts[1]).distance;
+            _camZoomStart = _camZoom;
           }
         },
-        // ピンチ開始: 現在のズーム倍率を記憶
-        onScaleStart: (_) {
-          _camZoomStart = _camZoom;
-        },
-        // ピンチ更新: 倍率に応じてカメラズームを変更
-        onScaleUpdate: (details) {
-          // pointerCount が2以上の時だけ反応（タップは無視）
-          if (details.pointerCount >= 2) {
-            final newZoom = _camZoomStart * details.scale;
-            _applyCameraZoom(newZoom);
+        // 指が動いている間
+        onPointerMove: (e) {
+          if (!_wipePointers.containsKey(e.pointer)) return;
+          _wipePointers[e.pointer] = e.position;
+          if (_wipePointers.length >= 2 && _wipePinchInitDist > 5) {
+            final pts = _wipePointers.values.toList();
+            final dist = (pts[0] - pts[1]).distance;
+            final scale = dist / _wipePinchInitDist;
+            _applyCameraZoom(_camZoomStart * scale);
           }
         },
-        child: Container(
+        // 指が離れた
+        onPointerUp: (e) {
+          _wipePointers.remove(e.pointer);
+          if (_wipePointers.length < 2) _wipePinchInitDist = 0;
+        },
+        onPointerCancel: (e) {
+          _wipePointers.remove(e.pointer);
+          if (_wipePointers.length < 2) _wipePinchInitDist = 0;
+        },
+        child: GestureDetector(
+          // シングルタップ: 前面/背面切替（Listener と独立して動く）
+          onTap: () {
+            if (_cameras != null && _cameras!.length > 1) {
+              final currentDirection = _cameraController!.description.lensDirection;
+              final newCamera = _cameras!.firstWhere(
+                (c) => c.lensDirection != currentDirection,
+                orElse: () => _cameras!.first,
+              );
+              _cameraController?.dispose();
+              _cameraController = CameraController(
+                newCamera,
+                ResolutionPreset.medium,
+                enableAudio: true,
+              );
+              _cameraController!.initialize().then((_) async {
+                // ズーム範囲を再取得
+                try {
+                  _camMinZoom = await _cameraController!.getMinZoomLevel();
+                  _camMaxZoom = await _cameraController!.getMaxZoomLevel();
+                  _camZoom = _camMinZoom;
+                } catch (_) {}
+                if (mounted) setState(() {});
+              });
+            }
+          },
+          child: Container(
           width: w,
           height: h,
           decoration: BoxDecoration(
@@ -834,6 +858,7 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
               ],
             ),
           ),
+        ),
         ),
       ),
     );
