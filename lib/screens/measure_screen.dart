@@ -220,13 +220,26 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 
   /// 録画プレビューのポップアップ（ピンチズーム＆パン対応）
   Future<void> _showVideoPreviewPopup(String tempPath) async {
-    final controller = VideoPlayerController.file(File(tempPath));
+    debugPrint('プレビュー表示開始: $tempPath');
+
+    // ファイルが存在するか確認
+    final file = File(tempPath);
+    if (!await file.exists()) {
+      debugPrint('録画ファイルが見つかりません: $tempPath');
+      _showMessage('録画ファイルが見つかりません');
+      return;
+    }
+
+    final controller = VideoPlayerController.file(file);
+    String? initError;
     try {
       await controller.initialize();
       await controller.setLooping(true);
       await controller.play();
+      debugPrint('動画初期化OK: ${controller.value.size}, ${controller.value.duration}');
     } catch (e) {
       debugPrint('動画読み込みエラー: $e');
+      initError = e.toString();
     }
 
     if (!mounted) {
@@ -237,13 +250,17 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
     final saveAction = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogCtx) => Dialog(
-        backgroundColor: Colors.black87,
-        insetPadding: const EdgeInsets.all(8),
-        child: _VideoPreviewContent(
-          controller: controller,
-          onSave: () => Navigator.pop(dialogCtx, 'save'),
-          onDiscard: () => Navigator.pop(dialogCtx, 'discard'),
+      builder: (dialogCtx) => PopScope(
+        canPop: false, // バックボタンで誤って閉じないように
+        child: Dialog(
+          backgroundColor: Colors.black87,
+          insetPadding: const EdgeInsets.all(8),
+          child: _VideoPreviewContent(
+            controller: controller,
+            initError: initError,
+            onSave: () => Navigator.pop(dialogCtx, 'save'),
+            onDiscard: () => Navigator.pop(dialogCtx, 'discard'),
+          ),
         ),
       ),
     );
@@ -1129,11 +1146,13 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
 // ============================================================
 class _VideoPreviewContent extends StatefulWidget {
   final VideoPlayerController controller;
+  final String? initError;
   final VoidCallback onSave;
   final VoidCallback onDiscard;
 
   const _VideoPreviewContent({
     required this.controller,
+    this.initError,
     required this.onSave,
     required this.onDiscard,
   });
@@ -1156,8 +1175,10 @@ class _VideoPreviewContentState extends State<_VideoPreviewContent> {
 
   void _onControllerUpdate() {
     if (!mounted) return;
-    final playing = widget.controller.value.isPlaying;
-    if (playing != _isPlaying) setState(() => _isPlaying = playing);
+    // controller の状態が変わったら必ず再ビルド（再生状態・初期化状態・再生位置など）
+    setState(() {
+      _isPlaying = widget.controller.value.isPlaying;
+    });
   }
 
   @override
@@ -1209,6 +1230,9 @@ class _VideoPreviewContentState extends State<_VideoPreviewContent> {
         ? widget.controller.value.aspectRatio
         : 16 / 9;
     final duration = widget.controller.value.duration;
+    // 画面サイズに基づいた動画エリアの固定サイズ（Stackは固定サイズが必要）
+    final screen = MediaQuery.of(context).size;
+    final videoAreaHeight = (screen.height * 0.5).clamp(220.0, 480.0);
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 760),
@@ -1236,111 +1260,130 @@ class _VideoPreviewContentState extends State<_VideoPreviewContent> {
           ),
 
           // ── 動画本体（ピンチ＆パン対応） ──
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // ズーム&パン領域
-              Container(
-                width: double.infinity,
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.55,
-                ),
-                color: Colors.black,
-                child: ClipRect(
-                  child: InteractiveViewer(
-                    transformationController: _transformCtrl,
-                    minScale: 1.0,
-                    maxScale: 5.0,
-                    panEnabled: true,
-                    scaleEnabled: true,
-                    child: Center(
-                      child: initialized
-                          ? AspectRatio(
-                              aspectRatio: aspect,
-                              child: VideoPlayer(widget.controller),
-                            )
-                          : const SizedBox(
-                              height: 200,
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
+          // ※ InteractiveViewer の pinch/pan を邪魔しないように
+          //   tap 検出は GestureDetector で「内側に」配置する
+          SizedBox(
+            width: double.infinity,
+            height: videoAreaHeight,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 黒背景
+                Container(color: Colors.black),
+
+                // ズーム&パン領域（InteractiveViewerは Stack の最下層）
+                Positioned.fill(
+                  child: ClipRect(
+                    child: InteractiveViewer(
+                      transformationController: _transformCtrl,
+                      minScale: 1.0,
+                      maxScale: 5.0,
+                      panEnabled: true,
+                      scaleEnabled: true,
+                      // tap は InteractiveViewer の child として登録 →
+                      // ピンチ(2本指)とは競合せず、単タップだけ拾える
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _togglePlay,
+                        child: Center(
+                          child: widget.initError != null
+                              ? Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.error_outline,
+                                          color: Colors.white70, size: 40),
+                                      const SizedBox(height: 8),
+                                      const Text('動画を再生できません',
+                                          style: TextStyle(color: Colors.white)),
+                                      const SizedBox(height: 4),
+                                      Text(widget.initError!,
+                                          style: const TextStyle(
+                                              color: Colors.white38, fontSize: 11),
+                                          textAlign: TextAlign.center),
+                                    ],
+                                  ),
+                                )
+                              : initialized
+                                  ? AspectRatio(
+                                      aspectRatio: aspect,
+                                      child: VideoPlayer(widget.controller),
+                                    )
+                                  : const Padding(
+                                      padding: EdgeInsets.all(24),
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
 
-              // ── 中央の再生/一時停止アイコン ──
-              if (initialized)
-                IgnorePointer(
-                  child: AnimatedOpacity(
-                    opacity: _isPlaying ? 0.0 : 1.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        size: 50,
-                        color: Colors.white,
+                // ── 中央の再生/一時停止アイコン ──
+                if (initialized)
+                  IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: _isPlaying ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          size: 50,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                ),
 
-              // ── 右上のズームボタン ──
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.zoom_out, color: Colors.white),
-                        tooltip: 'ズームアウト',
-                        onPressed: _zoomOut,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.fit_screen, color: Colors.white),
-                        tooltip: '元のサイズ',
-                        onPressed: _resetZoom,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.zoom_in, color: Colors.white),
-                        tooltip: 'ズームイン',
-                        onPressed: _zoomIn,
-                      ),
-                    ],
+                // ── 右上のズームボタン ──
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.zoom_out, color: Colors.white),
+                          tooltip: 'ズームアウト',
+                          onPressed: _zoomOut,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.fit_screen, color: Colors.white),
+                          tooltip: '元のサイズ',
+                          onPressed: _resetZoom,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.zoom_in, color: Colors.white),
+                          tooltip: 'ズームイン',
+                          onPressed: _zoomIn,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-
-              // ── 動画タップで再生/停止 ──
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _togglePlay,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           // ── シークバー ──
           if (initialized && duration.inMilliseconds > 0)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: VideoProgressIndicator(
                 widget.controller,
                 allowScrubbing: true,
