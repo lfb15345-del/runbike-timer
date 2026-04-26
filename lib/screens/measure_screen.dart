@@ -81,6 +81,12 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   final Map<int, Offset> _wipePointers = {};
   double _wipePinchInitDist = 0;
 
+  // ワイプの位置とサイズ（ユーザーがドラッグ＆リサイズで変更可能）
+  double? _wipeLeft;          // null = 初回起動時に画面右端に配置
+  double _wipeTop = 8;
+  double _wipeWidth = 140;
+  double _wipeHeight = 200;
+
   // チームモード
   final Map<int, int> _teamFinished = {};
 
@@ -708,124 +714,104 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
   }
 
   /// カメラプレビューウィジェット（ワイプ表示）
-  /// - シングルタップ → 前面/背面カメラ切替
   /// - 指2本でピンチ → カメラのデジタルズーム
-  /// - 表示サイズはピンチ倍率に応じて拡大（ズーム中は大きく見える）
+  /// - 1本指でドラッグ → ワイプを画面内で移動
+  /// - 右下のリサイズハンドル(↘) → ワイプサイズ変更
+  /// - 右上の📷ボタン → 前面/背面カメラ切替
   Widget _buildCameraPreview() {
     if (!_isCameraInitialized || _cameraController == null) {
       return const SizedBox.shrink();
     }
 
-    // ワイプの表示サイズ（ズーム時は少し大きくして見やすく）
-    const baseW = 120.0;
-    const baseH = 160.0;
-    // カメラズーム倍率に連動してワイプ表示も少し拡大（最大2倍まで）
-    final wipeScale = (1.0 + (_camZoom - _camMinZoom) * 0.2).clamp(1.0, 2.0);
-    final w = baseW * wipeScale;
-    final h = baseH * wipeScale;
+    final screenSize = MediaQuery.of(context).size;
+    // 初回は画面右上に配置
+    _wipeLeft ??= screenSize.width - _wipeWidth - 8;
+    // 画面外にはみ出さないようクランプ
+    final maxLeft = (screenSize.width - _wipeWidth).clamp(0.0, double.infinity);
+    final maxTop = (screenSize.height - _wipeHeight - 80).clamp(0.0, double.infinity);
+    final left = _wipeLeft!.clamp(0.0, maxLeft);
+    final top = _wipeTop.clamp(0.0, maxTop);
 
     return Positioned(
-      top: 8,
-      right: 8,
-      // Listener は生のポインターイベントを受け取るのでジェスチャー競合の影響なし
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        // 指が触れた瞬間
-        onPointerDown: (e) {
-          _wipePointers[e.pointer] = e.position;
-          if (_wipePointers.length == 2) {
-            final pts = _wipePointers.values.toList();
-            _wipePinchInitDist = (pts[0] - pts[1]).distance;
-            _camZoomStart = _camZoom;
-          }
-        },
-        // 指が動いている間
-        onPointerMove: (e) {
-          if (!_wipePointers.containsKey(e.pointer)) return;
-          _wipePointers[e.pointer] = e.position;
-          if (_wipePointers.length >= 2 && _wipePinchInitDist > 5) {
-            final pts = _wipePointers.values.toList();
-            final dist = (pts[0] - pts[1]).distance;
-            final scale = dist / _wipePinchInitDist;
-            _applyCameraZoom(_camZoomStart * scale);
-          }
-        },
-        // 指が離れた
-        onPointerUp: (e) {
-          _wipePointers.remove(e.pointer);
-          if (_wipePointers.length < 2) _wipePinchInitDist = 0;
-        },
-        onPointerCancel: (e) {
-          _wipePointers.remove(e.pointer);
-          if (_wipePointers.length < 2) _wipePinchInitDist = 0;
-        },
-        child: GestureDetector(
-          // シングルタップ: 前面/背面切替（Listener と独立して動く）
-          onTap: () {
-            if (_cameras != null && _cameras!.length > 1) {
-              final currentDirection = _cameraController!.description.lensDirection;
-              final newCamera = _cameras!.firstWhere(
-                (c) => c.lensDirection != currentDirection,
-                orElse: () => _cameras!.first,
-              );
-              _cameraController?.dispose();
-              _cameraController = CameraController(
-                newCamera,
-                ResolutionPreset.medium,
-                enableAudio: true,
-              );
-              _cameraController!.initialize().then((_) async {
-                // ズーム範囲を再取得
-                try {
-                  _camMinZoom = await _cameraController!.getMinZoomLevel();
-                  _camMaxZoom = await _cameraController!.getMaxZoomLevel();
-                  _camZoom = _camMinZoom;
-                } catch (_) {}
-                if (mounted) setState(() {});
-              });
+      left: left,
+      top: top,
+      child: SizedBox(
+        width: _wipeWidth,
+        height: _wipeHeight,
+        // Listener: 生のポインターイベントでピンチ検出（ジェスチャー競合の影響なし）
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (e) {
+            _wipePointers[e.pointer] = e.position;
+            if (_wipePointers.length == 2) {
+              final pts = _wipePointers.values.toList();
+              _wipePinchInitDist = (pts[0] - pts[1]).distance;
+              _camZoomStart = _camZoom;
             }
           },
-          child: Container(
-          width: w,
-          height: h,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isVideoRecording ? Colors.red : Colors.white,
-              width: _isVideoRecording ? 3 : 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 8,
-                offset: const Offset(2, 2),
+          onPointerMove: (e) {
+            if (!_wipePointers.containsKey(e.pointer)) return;
+            _wipePointers[e.pointer] = e.position;
+            if (_wipePointers.length >= 2 && _wipePinchInitDist > 5) {
+              final pts = _wipePointers.values.toList();
+              final dist = (pts[0] - pts[1]).distance;
+              _applyCameraZoom(_camZoomStart * dist / _wipePinchInitDist);
+            }
+          },
+          onPointerUp: (e) {
+            _wipePointers.remove(e.pointer);
+            if (_wipePointers.length < 2) _wipePinchInitDist = 0;
+          },
+          onPointerCancel: (e) {
+            _wipePointers.remove(e.pointer);
+            if (_wipePointers.length < 2) _wipePinchInitDist = 0;
+          },
+          // 1本指ドラッグでワイプ移動
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              if (_wipePointers.length >= 2) return; // ピンチ中は移動しない
+              setState(() {
+                _wipeLeft = (left + details.delta.dx)
+                    .clamp(0.0, screenSize.width - _wipeWidth);
+                _wipeTop = (top + details.delta.dy)
+                    .clamp(0.0, screenSize.height - _wipeHeight - 80);
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isVideoRecording ? Colors.red : Colors.white,
+                  width: _isVideoRecording ? 3 : 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(2, 2),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CameraPreview(_cameraController!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // カメラ映像
+                    CameraPreview(_cameraController!),
 
-                // ── ズーム倍率インジケータ（左下） ──
-                Positioned(
-                  left: 4,
-                  bottom: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.zoom_in,
-                            color: Colors.white, size: 12),
-                        const SizedBox(width: 2),
-                        Text(
+                    // ── ズーム倍率インジケータ（左上） ──
+                    Positioned(
+                      left: 4,
+                      top: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
                           '${_camZoom.toStringAsFixed(1)}x',
                           style: const TextStyle(
                             color: Colors.white,
@@ -833,51 +819,108 @@ class _MeasureScreenState extends State<MeasureScreen> with WidgetsBindingObserv
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
 
-                // ── +/- ボタン（右下、確実な操作用） ──
-                Positioned(
-                  right: 2,
-                  bottom: 2,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _zoomBtn(Icons.add, () {
-                        _applyCameraZoom(_camZoom + 0.5);
-                      }),
-                      const SizedBox(height: 2),
-                      _zoomBtn(Icons.remove, () {
-                        _applyCameraZoom(_camZoom - 0.5);
-                      }),
-                    ],
-                  ),
+                    // ── 右上: 📷 カメラ切替ボタン ──
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _switchCamera,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.flip_camera_android,
+                              color: Colors.white, size: 18),
+                        ),
+                      ),
+                    ),
+
+                    // ── 移動ヒント（左下、目立たない） ──
+                    Positioned(
+                      left: 4,
+                      bottom: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(Icons.open_with,
+                            color: Colors.white70, size: 12),
+                      ),
+                    ),
+
+                    // ── 右下: リサイズハンドル ──
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: (details) {
+                          setState(() {
+                            _wipeWidth = (_wipeWidth + details.delta.dx)
+                                .clamp(80.0, screenSize.width - 16);
+                            _wipeHeight = (_wipeHeight + details.delta.dy)
+                                .clamp(100.0, screenSize.height - 100);
+                          });
+                        },
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(10),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.south_east,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
         ),
       ),
     );
   }
 
-  /// ズームボタン（小さい円形ボタン）
-  Widget _zoomBtn(IconData icon, VoidCallback onPressed) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.65),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: Colors.white, size: 14),
-      ),
+  /// 前面/背面カメラ切替
+  void _switchCamera() {
+    if (_cameras == null || _cameras!.length < 2) return;
+    final currentDirection = _cameraController!.description.lensDirection;
+    final newCamera = _cameras!.firstWhere(
+      (c) => c.lensDirection != currentDirection,
+      orElse: () => _cameras!.first,
     );
+    _cameraController?.dispose();
+    _cameraController = CameraController(
+      newCamera,
+      ResolutionPreset.medium,
+      enableAudio: true,
+    );
+    _cameraController!.initialize().then((_) async {
+      try {
+        _camMinZoom = await _cameraController!.getMinZoomLevel();
+        _camMaxZoom = await _cameraController!.getMaxZoomLevel();
+        _camZoom = _camMinZoom;
+      } catch (_) {}
+      if (mounted) setState(() {});
+    });
   }
 
   @override
