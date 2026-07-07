@@ -11,20 +11,14 @@ workflows:
       # 登録済みのApp Store Connect APIキー名（KIZAMONI liveと共用）
       app_store_connect: kizamoni_asc
     environment:
+      # 自動コード署名: Code signing identities に保管済みの
+      # 配布証明書(ios_distribution)を使い、プロファイルは自動作成される
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.runbike.runbikeApp
       flutter: stable
-      vars:
-        BUNDLE_ID: com.runbike.runbikeApp
     scripts:
-      - name: 署名ファイルを取得（存在しなければ自動作成）
-        script: |
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-      - name: 証明書をキーチェーンに登録
-        script: |
-          keychain initialize
-          keychain add-certificates
-      - name: Xcodeプロジェクトにプロファイルを適用
+      - name: Xcodeプロジェクトに署名設定を適用
         script: xcode-project use-profiles
       - name: 依存パッケージ取得
         script: flutter pub get
