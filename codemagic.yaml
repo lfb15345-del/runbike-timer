@@ -11,15 +11,25 @@ workflows:
       # 登録済みのApp Store Connect APIキー名（KIZAMONI liveと共用）
       app_store_connect: kizamoni_asc
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.runbike.runbikeApp
       flutter: stable
+      vars:
+        BUNDLE_ID: com.runbike.runbikeApp
     scripts:
+      - name: 署名ファイルを取得（存在しなければ自動作成）
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: 証明書をキーチェーンに登録
+        script: |
+          keychain initialize
+          keychain add-certificates
+      - name: Xcodeプロジェクトにプロファイルを適用
+        script: xcode-project use-profiles
       - name: 依存パッケージ取得
         script: flutter pub get
       - name: iOS リリースビルド（署名付き ipa 作成）
-        script: flutter build ipa --release
+        script: flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
