@@ -32,6 +32,8 @@
 	<string>録画時に周囲の音声を記録するためにマイクを使用します</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>録画した動画を写真ライブラリに保存します</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>録画した動画を写真ライブラリに保存するためにアクセスします</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
