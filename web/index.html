@@ -50,6 +50,23 @@
   -->
   <script src="flutter_bootstrap.js" async></script>
 
+  <!-- ピンチ・ダブルタップによる画面拡大を無効化（アプリ内のズーム機能には影響しない） -->
+  <style>
+    html, body {
+      touch-action: pan-x pan-y;
+      overscroll-behavior: none;
+    }
+  </style>
+  <script>
+    // iOS Safari は viewport の user-scalable=no を無視するため、ジェスチャー自体を止める
+    document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+    document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
+    // 2本指以上のタッチによるブラウザズームを抑止（Flutter内の操作は1本指なので影響なし）
+    document.addEventListener('touchmove', function(e) {
+      if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+  </script>
+
   <!-- ランバイクタイマー Web Audio API（WAVファイルに依存しない音声生成） -->
   <script>
     // グローバルAudioContext（全音声で共有）

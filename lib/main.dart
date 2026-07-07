@@ -7,6 +7,7 @@ import 'screens/course_screen.dart';
 import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
 import 'services/web_camera_service.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,18 +21,12 @@ class RunbikeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 日本語フォント（Web: Google Fonts Noto Sans JP、Android: システムフォント）
-    const japaneseFontFamily = 'Noto Sans JP';
-
     return MaterialApp(
       title: 'ランバイクタイマー',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ja', 'JP'),
-      theme: ThemeData(
-        colorSchemeSeed: Colors.green,
-        useMaterial3: true,
-        fontFamily: japaneseFontFamily,
-      ),
+      // テーマは theme.dart に一元化（色・ボタン・チップ・タブバー）
+      theme: AppTheme.light(),
       // Web版は音声解禁画面を最初に表示
       home: kIsWeb ? const WebAudioUnlockScreen() : const HomePage(),
     );
@@ -79,7 +74,7 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF1b5e20), Color(0xFF004d40)],
+              colors: AppTheme.brandGradient,
             ),
           ),
           child: SafeArea(
@@ -195,25 +190,26 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: _onTabTapped,
+        // 選択色はテーマ（theme.dart）で一括管理
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.timer),
-            selectedIcon: Icon(Icons.timer, color: Colors.green),
+            icon: Icon(Icons.timer_outlined),
+            selectedIcon: Icon(Icons.timer),
             label: '計測',
           ),
           NavigationDestination(
             icon: Icon(Icons.fitness_center_outlined),
-            selectedIcon: Icon(Icons.fitness_center, color: Colors.green),
+            selectedIcon: Icon(Icons.fitness_center),
             label: '練習',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics, color: Colors.green),
+            selectedIcon: Icon(Icons.analytics),
             label: '解析・共有',
           ),
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map, color: Colors.green),
+            selectedIcon: Icon(Icons.map),
             label: 'コース設定',
           ),
         ],

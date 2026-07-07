@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Runbike App</string>
+	<string>ランバイクタイマー</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>走行の様子を録画するためにカメラを使用します</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>録画時に周囲の音声を記録するためにマイクを使用します</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>録画した動画を写真ライブラリに保存します</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

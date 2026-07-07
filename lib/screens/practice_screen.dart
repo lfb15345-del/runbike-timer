@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
-import 'package:audioplayers/audioplayers.dart';
-import '../services/web_audio_service.dart';
-import 'measure_screen.dart';
+import '../constants/sound_config.dart';
+import '../services/sound_service.dart';
+import '../services/app_settings.dart';
+import '../widgets/bt_offset_control.dart';
 
 /// インターバル練習の状態
 enum PracticePhase { idle, countdown, sprint, rest, finished }
@@ -32,7 +32,6 @@ class _PracticeScreenState extends State<PracticeScreen>
   // デフォルトはアップテンポBGM（走行中の盛り上げと、沈黙を感じさせないため）
   String _bgmType = 'upbeat'; // none, metronome, upbeat
   int _metronomeBpm = 180;
-  Timer? _metronomeTimer;
 
   // --- 状態管理 ---
   PracticePhase _phase = PracticePhase.idle;
@@ -40,14 +39,8 @@ class _PracticeScreenState extends State<PracticeScreen>
   int _remainingMs = 0;
   Timer? _timer;
 
-  // --- 音声（各用途で独立したプレイヤー） ---
-  final AudioPlayer _startPlayer = AudioPlayer();
-  final AudioPlayer _whistlePlayer = AudioPlayer();
-  final AudioPlayer _bgmPlayer = AudioPlayer();
-  final AudioPlayer _tickPlayer = AudioPlayer();
-  static const int _startOffset = 10600;
-  static const String _startSound = 'sounds/start02.mp3';
-  static const String _whistleSound = 'sounds/whistle.wav';
+  // --- 音声（練習では「基本」スタート音を使用、定義は SoundConfig に一元化） ---
+  static const StartSound _startSound = SoundConfig.basic;
 
   // --- アニメーション ---
   late AnimationController _speedLineController;
@@ -64,32 +57,13 @@ class _PracticeScreenState extends State<PracticeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _preloadSounds();
-  }
-
-  /// 音声ファイルをプリロード
-  Future<void> _preloadSounds() async {
-    if (kIsWeb) {
-      // Web版: Web Audio APIでプリロード済み（main.dart の unlock画面で実行）
-      // 念のためここでも呼ぶ
-      WebAudioService.preloadSound('start02.mp3');
-    } else {
-      // ネイティブ版: audioplayers でプリロード
-      try {
-        await _startPlayer.setSource(AssetSource(_startSound));
-        await _whistlePlayer.setSource(AssetSource(_whistleSound));
-      } catch (_) {}
-    }
+    SoundService.preloadStartSounds();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _metronomeTimer?.cancel();
-    _startPlayer.dispose();
-    _whistlePlayer.dispose();
-    _bgmPlayer.dispose();
-    _tickPlayer.dispose();
+    SoundService.stopAll();
     _speedLineController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -100,7 +74,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     final totalSec = (_sprintSec + _restSec) * _totalRounds;
     final min = totalSec ~/ 60;
     final sec = totalSec % 60;
-    return '${min}分${sec.toString().padLeft(2, '0')}秒';
+    return '$min分${sec.toString().padLeft(2, '0')}秒';
   }
 
   /// 残り秒数を表示用に変換
@@ -120,21 +94,11 @@ class _PracticeScreenState extends State<PracticeScreen>
       PracticeScreen.isRunning = true;
     });
 
-    final DateTime playStartTime;
-
-    if (kIsWeb) {
-      // === Web版: Web Audio API で即時再生（レイテンシーほぼゼロ） ===
-      WebAudioService.playSoundBuffer('start02.mp3');
-      playStartTime = DateTime.now();
-    } else {
-      // === ネイティブ版: audioplayers で再生 ===
-      playStartTime = DateTime.now();
-      await _startPlayer.stop();
-      await _startPlayer.play(AssetSource(_startSound));
-    }
+    final playStartTime = DateTime.now();
+    SoundService.playStartSound(_startSound);
 
     // スタート音のオフセット + BT補正 後にGO!
-    final totalOffset = _startOffset + MeasureScreen.bluetoothOffsetMs;
+    final totalOffset = _startSound.offsetMs + AppSettings.bluetoothOffsetMs;
     final measureStart =
         playStartTime.add(Duration(milliseconds: totalOffset));
 
@@ -152,39 +116,10 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   /// BGMを開始（走行フェーズ開始時に呼ぶ）
   void _startBgm() {
-    _stopBgm();
-    if (kIsWeb) {
-      // === Web版: JavaScript Web Audio API で生成 ===
-      if (_bgmType == 'metronome') {
-        WebAudioService.startMetronome(_metronomeBpm);
-      } else if (_bgmType == 'upbeat') {
-        WebAudioService.startUpbeat();
-      }
-    } else {
-      // === ネイティブ版: audioplayers ===
-      if (_bgmType == 'metronome') {
-        final intervalMs = (60000 / _metronomeBpm).round();
-        _tickPlayer.play(AssetSource('sounds/tick.wav'));
-        _metronomeTimer = Timer.periodic(
-          Duration(milliseconds: intervalMs),
-          (_) => _tickPlayer.play(AssetSource('sounds/tick.wav')),
-        );
-      } else if (_bgmType == 'upbeat') {
-        _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-        _bgmPlayer.play(AssetSource('sounds/upbeat.wav'));
-      }
-    }
-  }
-
-  /// BGMを停止
-  void _stopBgm() {
-    if (kIsWeb) {
-      WebAudioService.stopAll();
-    } else {
-      _metronomeTimer?.cancel();
-      _metronomeTimer = null;
-      _bgmPlayer.stop();
-      _tickPlayer.stop();
+    if (_bgmType == 'metronome') {
+      SoundService.startMetronome(_metronomeBpm);
+    } else if (_bgmType == 'upbeat') {
+      SoundService.startUpbeat();
     }
   }
 
@@ -204,12 +139,8 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _startRest() {
     // BGM停止 → ホイッスル音
-    _stopBgm();
-    if (kIsWeb) {
-      WebAudioService.playWhistle();
-    } else {
-      _whistlePlayer.play(AssetSource(_whistleSound));
-    }
+    SoundService.stopBgm();
+    SoundService.playWhistle();
     HapticFeedback.mediumImpact();
 
     setState(() {
@@ -220,19 +151,12 @@ class _PracticeScreenState extends State<PracticeScreen>
 
     // 休憩の最後にスタート音を再生（次ラウンドのカウントダウン）
     if (_currentRound < _totalRounds) {
-      final nextTotalOffset = _startOffset + MeasureScreen.bluetoothOffsetMs;
+      final nextTotalOffset = _startSound.offsetMs + AppSettings.bluetoothOffsetMs;
       final soundDelay = (_restSec * 1000) - nextTotalOffset;
       if (soundDelay > 0) {
-        Future.delayed(Duration(milliseconds: soundDelay), () async {
+        Future.delayed(Duration(milliseconds: soundDelay), () {
           if (_phase == PracticePhase.rest) {
-            if (kIsWeb) {
-              // Web版: Web Audio API で即時再生
-              WebAudioService.playSoundBuffer('start02.mp3');
-            } else {
-              // ネイティブ版: audioplayers で再生
-              await _startPlayer.stop();
-              await _startPlayer.play(AssetSource(_startSound));
-            }
+            SoundService.playStartSound(_startSound);
           }
         });
       }
@@ -251,14 +175,16 @@ class _PracticeScreenState extends State<PracticeScreen>
       if (remaining <= 0) {
         _timer?.cancel();
         if (_phase == PracticePhase.sprint) {
-          _startRest();
-        } else if (_phase == PracticePhase.rest) {
-          if (_currentRound < _totalRounds) {
-            setState(() => _currentRound++);
-            _startSprint();
-          } else {
+          // 最後のスプリント後は休憩なしで即終了（締まる終わり方）
+          if (_currentRound >= _totalRounds) {
             _onFinished();
+          } else {
+            _startRest();
           }
+        } else if (_phase == PracticePhase.rest) {
+          // 休憩後は必ず次のラウンドへ（最後の休憩は上のロジックで発生しない）
+          setState(() => _currentRound++);
+          _startSprint();
         }
       } else {
         if (remaining <= 3000 && !_pulseController.isAnimating) {
@@ -275,12 +201,8 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _onFinished() {
     _timer?.cancel();
-    _stopBgm();
-    if (kIsWeb) {
-      WebAudioService.playWhistle();
-    } else {
-      _whistlePlayer.play(AssetSource(_whistleSound));
-    }
+    SoundService.stopBgm();
+    SoundService.playWhistle();
     HapticFeedback.heavyImpact();
     _pulseController.stop();
     _pulseController.reset();
@@ -293,12 +215,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _onCancel() {
     _timer?.cancel();
-    _stopBgm();
-    if (kIsWeb) {
-      WebAudioService.stopAll(); // スタート音含め全停止
-    } else {
-      _startPlayer.stop();
-    }
+    SoundService.stopAll(); // スタート音・BGM含め全停止
     _pulseController.stop();
     _pulseController.reset();
     setState(() {
@@ -319,8 +236,9 @@ class _PracticeScreenState extends State<PracticeScreen>
   }
 
   double get _overallProgress {
-    if (_phase == PracticePhase.idle ||
-        _phase == PracticePhase.countdown) return 0;
+    if (_phase == PracticePhase.idle || _phase == PracticePhase.countdown) {
+      return 0;
+    }
     if (_phase == PracticePhase.finished) return 1;
 
     final roundMs = (_sprintSec + _restSec) * 1000;
@@ -435,68 +353,8 @@ class _PracticeScreenState extends State<PracticeScreen>
             ),
           ],
           const Divider(height: 16),
-          // Bluetooth遅延補正（計測タブと共有）
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.bluetooth,
-                size: 18,
-                color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'BT補正',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 32, height: 32,
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  iconSize: 20,
-                  onPressed: MeasureScreen.bluetoothOffsetMs > 0
-                      ? () => setState(() => MeasureScreen.bluetoothOffsetMs =
-                          (MeasureScreen.bluetoothOffsetMs - 50).clamp(0, 500))
-                      : null,
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
-              ),
-              Container(
-                width: 72,
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: MeasureScreen.bluetoothOffsetMs > 0
-                      ? Colors.blue.withValues(alpha: 0.1)
-                      : Colors.grey.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '+${MeasureScreen.bluetoothOffsetMs}ms',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: MeasureScreen.bluetoothOffsetMs > 0 ? Colors.blue : Colors.grey,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 32, height: 32,
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  iconSize: 20,
-                  onPressed: MeasureScreen.bluetoothOffsetMs < 500
-                      ? () => setState(() => MeasureScreen.bluetoothOffsetMs =
-                          (MeasureScreen.bluetoothOffsetMs + 50).clamp(0, 500))
-                      : null,
-                  icon: const Icon(Icons.add_circle_outline),
-                ),
-              ),
-            ],
-          ),
+          // Bluetooth遅延補正（計測タブと共有、共通ウィジェット）
+          BtOffsetControl(onChanged: () => setState(() {})),
         ],
       ),
     );
