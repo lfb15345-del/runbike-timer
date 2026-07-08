@@ -8,6 +8,7 @@ import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
 import 'services/web_camera_service.dart';
 import 'theme.dart';
+import 'widgets/runbike_mark.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,8 +42,26 @@ class WebAudioUnlockScreen extends StatefulWidget {
   State<WebAudioUnlockScreen> createState() => _WebAudioUnlockScreenState();
 }
 
-class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
+class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = false;
+  late final AnimationController _motionController;
+
+  @override
+  void initState() {
+    super.initState();
+    // ロゴ後方のスピードラインをゆっくりループさせる（レース感の演出）
+    _motionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _motionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _unlockAudio() async {
     if (_isLoading) return; // 二重タップ防止
@@ -65,6 +84,7 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.brandGradient.last,
       body: GestureDetector(
         onTap: _unlockAudio,
         child: Container(
@@ -72,71 +92,140 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
           height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
               colors: AppTheme.brandGradient,
             ),
           ),
-          child: SafeArea(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.directions_bike,
-                    size: 100, color: Colors.white.withAlpha(200)),
-                const SizedBox(height: 24),
-                const Text('ランバイクタイマー',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 4,
-                    )),
-                const SizedBox(height: 48),
-
-                // ローディング中 or タップ待ち
-                if (_isLoading) ...[
-                  const SizedBox(
-                    width: 48, height: 48,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 3,
+          child: Stack(
+            // 非Positioned子（SafeArea配下のColumn）を画面中央に置く
+            // （デフォルトのtopLeftのままだと横長画面で左寄りになる）
+            alignment: Alignment.center,
+            children: [
+              // 右下コーナーのチェッカーフラッグ・アクセント（アイコンと共通のブランド言語）
+              Positioned(
+                right: -24,
+                bottom: -24,
+                child: Opacity(
+                  opacity: 0.5,
+                  child: _CheckerAccent(cell: 22, cols: 6, rows: 6),
+                ),
+              ),
+              SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedBuilder(
+                      animation: _motionController,
+                      builder: (context, _) => RunbikeMark(
+                        width: 280,
+                        height: 190,
+                        motion: _motionController.value,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('音声を準備中...',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.white70,
-                        letterSpacing: 2,
-                      )),
-                ] else ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 40, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white54),
-                    ),
-                    child: const Text('タップして開始',
+                    const SizedBox(height: 20),
+                    // タイトル + アンダーラインのレースストライプ
+                    const Text('ランバイクタイマー',
                         style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
-                          letterSpacing: 2,
+                          letterSpacing: 3,
+                          height: 1.1,
                         )),
-                  ),
-                  const SizedBox(height: 24),
-                  Text('※ 音声機能を有効にするため\n  最初にタップが必要です',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withAlpha(150))),
-                ],
-              ],
-            ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: 90,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(height: 56),
+
+                    // ローディング中 or タップ待ち
+                    if (_isLoading) ...[
+                      const SizedBox(
+                        width: 44, height: 44,
+                        child: CircularProgressIndicator(
+                          color: AppTheme.accentAmber,
+                          strokeWidth: 3.5,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('音声を準備中...',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white70,
+                            letterSpacing: 2,
+                          )),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 44, vertical: 17),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.accentAmber.withValues(alpha: 0.4),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Text('タップして開始',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.brandGradient.last,
+                              letterSpacing: 2,
+                            )),
+                      ),
+                      const SizedBox(height: 24),
+                      Text('※ 音声機能を有効にするため\n  最初にタップが必要です',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withAlpha(150))),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// チェッカーフラッグ風のコーナーアクセント（アプリアイコンと共通のブランド言語）
+class _CheckerAccent extends StatelessWidget {
+  final double cell;
+  final int cols;
+  final int rows;
+
+  const _CheckerAccent({required this.cell, required this.cols, required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: cell * cols,
+      height: cell * rows,
+      child: Wrap(
+        children: List.generate(cols * rows, (i) {
+          final row = i ~/ cols;
+          final col = i % cols;
+          final on = (row + col) % 2 == 0;
+          return Container(
+            width: cell,
+            height: cell,
+            color: on ? Colors.white : Colors.transparent,
+          );
+        }),
       ),
     );
   }

@@ -12,10 +12,13 @@ class AppTheme {
   static const Color goRed = Color(0xFFD32F2F); // ゴールボタン
   static const Color recordRed = Color(0xFFC62828); // 録画表示
 
-  /// 起動画面などで使うブランドグラデーション
+  /// アプリアイコンと共通のアクセントカラー（ホイールハブ・グリップ・CTAボタン等）
+  static const Color accentAmber = Color(0xFFFFC531);
+
+  /// 起動画面・アイコンで使うブランドグラデーション（左上=明るいグリーン→右下=深緑）
   static const List<Color> brandGradient = [
-    Color(0xFF1B5E20),
-    Color(0xFF004D40),
+    Color(0xFF3E8E4F),
+    Color(0xFF072016),
   ];
 
   static ThemeData light() {
