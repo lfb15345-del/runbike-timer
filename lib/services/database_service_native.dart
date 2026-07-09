@@ -284,4 +284,9 @@ class DatabaseService {
     );
     return results.isNotEmpty ? results.first : null;
   }
+
+  /// 保存済みの全コースを新しい日付順で取得（過去のコース見直し用）
+  static Future<List<Map<String, dynamic>>> getAllCourses() async {
+    return await _db!.query('course', orderBy: 'date DESC');
+  }
 }

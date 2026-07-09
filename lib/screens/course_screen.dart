@@ -24,10 +24,14 @@ class _CourseScreenState extends State<CourseScreen> {
 
   bool _saved = false;
 
+  // 過去に保存したコースの一覧（新しい日付順）
+  List<Map<String, dynamic>> _pastCourses = [];
+
   @override
   void initState() {
     super.initState();
     _loadTodayCourse();
+    _loadPastCourses();
   }
 
   @override
@@ -56,6 +60,14 @@ class _CourseScreenState extends State<CourseScreen> {
     }
   }
 
+  /// 過去のコース一覧を読み込む
+  Future<void> _loadPastCourses() async {
+    final courses = await DatabaseService.getAllCourses();
+    if (mounted) {
+      setState(() => _pastCourses = courses);
+    }
+  }
+
   /// 保存
   Future<void> _save() async {
     await DatabaseService.saveCourse(
@@ -69,6 +81,7 @@ class _CourseScreenState extends State<CourseScreen> {
     );
 
     setState(() => _saved = true);
+    _loadPastCourses(); // 一覧も最新化
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -220,10 +233,97 @@ class _CourseScreenState extends State<CourseScreen> {
                 ),
               ),
               const SizedBox(height: 32),
+
+              // --- 過去のコース一覧 ---
+              if (_pastCourses.isNotEmpty) ...[
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  '過去のコース',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                const Text('保存したコース情報を日付ごとに見直せます',
+                    style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 12),
+                ..._pastCourses.map(_buildCourseCard),
+              ],
+              const SizedBox(height: 32),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// 過去コース1件分のカード表示
+  Widget _buildCourseCard(Map<String, dynamic> course) {
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final isToday = course['date'] == today;
+
+    // 「30m・直線10m・カーブ2」のような要約行を組み立てる
+    final details = <String>[];
+    if (course['length_m'] != null) details.add('全長${_trimZero(course['length_m'])}m');
+    if (course['first_straight_m'] != null) {
+      details.add('直線${_trimZero(course['first_straight_m'])}m');
+    }
+    if ((course['curve_count'] ?? 0) > 0) details.add('カーブ${course['curve_count']}');
+    if (course['surface'] != null) details.add('${course['surface']}');
+    if (course['weather'] != null) details.add('${course['weather']}');
+
+    final note = course['note'] as String?;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  course['date'] ?? '',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.grey),
+                ),
+                if (isToday)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Chip(
+                      label: Text('今日', style: TextStyle(fontSize: 12)),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              (course['name'] as String?)?.isNotEmpty == true
+                  ? course['name']
+                  : '（名前なし）',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            if (details.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(details.join(' ・ '),
+                  style: const TextStyle(fontSize: 14, color: Colors.black87)),
+            ],
+            if (note != null && note.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('メモ: $note',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 12.0 → "12"、12.5 → "12.5" のように余計な小数点を消す
+  String _trimZero(dynamic value) {
+    if (value == null) return '';
+    final d = value is double ? value : double.tryParse(value.toString()) ?? 0;
+    return d == d.roundToDouble() ? d.round().toString() : d.toString();
   }
 }

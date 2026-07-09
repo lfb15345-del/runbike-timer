@@ -270,4 +270,11 @@ class DatabaseService {
     final results = _courses.where((c) => c['date'] == today);
     return results.isNotEmpty ? Map.from(results.first) : null;
   }
+
+  /// 保存済みの全コースを新しい日付順で取得（過去のコース見直し用）
+  static Future<List<Map<String, dynamic>>> getAllCourses() async {
+    final sorted = List<Map<String, dynamic>>.from(_courses.map(Map.from));
+    sorted.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    return sorted;
+  }
 }
