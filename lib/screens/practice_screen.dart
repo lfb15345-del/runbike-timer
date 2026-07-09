@@ -35,6 +35,9 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   // --- 状態管理 ---
   PracticePhase _phase = PracticePhase.idle;
+
+  // スタートの世代番号（連打や「中止→即再スタート」で古い処理が生き残るのを防ぐ）
+  int _startGeneration = 0;
   int _currentRound = 1;
   int _remainingMs = 0;
   Timer? _timer;
@@ -88,6 +91,10 @@ class _PracticeScreenState extends State<PracticeScreen>
   // ========================================
 
   Future<void> _onStart() async {
+    // 連打防止: 待機中でなければ受け付けない（画面が切り替わる前の2度押し対策）
+    if (_phase != PracticePhase.idle) return;
+    final generation = ++_startGeneration;
+
     setState(() {
       _phase = PracticePhase.countdown;
       _currentRound = 1;
@@ -106,7 +113,10 @@ class _PracticeScreenState extends State<PracticeScreen>
     if (waitMs > 0) {
       await Future.delayed(Duration(milliseconds: waitMs));
     }
-    if (_phase != PracticePhase.countdown) return;
+    // 待っている間に中止・再スタートされていたら、この古い処理は破棄する
+    if (generation != _startGeneration || _phase != PracticePhase.countdown) {
+      return;
+    }
     _startSprint();
   }
 

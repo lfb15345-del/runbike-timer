@@ -1,7 +1,7 @@
-name: runbike_app
-description: "ランバイク練習・タイム計測アプリ"
+﻿name: runbike_app
+description: "繝ｩ繝ｳ繝舌う繧ｯ邱ｴ鄙偵・繧ｿ繧､繝險域ｸｬ繧｢繝励Μ"
 publish_to: 'none'
-version: 1.0.2+6
+version: 1.0.3+7
 
 environment:
   sdk: ^3.11.1

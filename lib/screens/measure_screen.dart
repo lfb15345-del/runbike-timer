@@ -46,6 +46,9 @@ class _MeasureScreenState extends State<MeasureScreen>
   DateTime? _measureStartTime;
   int _elapsedMs = 0;
 
+  // スタートの世代番号（連打や「中止→即再スタート」で古い処理が生き残るのを防ぐ）
+  int _startGeneration = 0;
+
   // カメラ関連
   bool _isRecordingEnabled = false;
   CameraController? _cameraController;
@@ -334,6 +337,10 @@ class _MeasureScreenState extends State<MeasureScreen>
 
   /// スタートボタン押下
   Future<void> _onStart() async {
+    // 連打防止: 待機中でなければ受け付けない（画面が切り替わる前の2度押し対策）
+    if (_state != TimerState.waiting) return;
+    final generation = ++_startGeneration;
+
     // スタート音のオフセット + Bluetooth補正
     final offset = _selectedSound.offsetMs + AppSettings.bluetoothOffsetMs;
 
@@ -364,7 +371,10 @@ class _MeasureScreenState extends State<MeasureScreen>
         await Future.delayed(Duration(milliseconds: waitMs));
       }
 
-      if (_state != TimerState.countdown) return;
+      // 待っている間に中止・再スタートされていたら、この古い処理は破棄する
+      if (generation != _startGeneration || _state != TimerState.countdown) {
+        return;
+      }
     } else {
       measureStart = DateTime.now();
     }
@@ -375,6 +385,7 @@ class _MeasureScreenState extends State<MeasureScreen>
       _elapsedMs = 0;
     });
 
+    _timer?.cancel(); // 古いタイマーが残っていたら止める（表示ずれ防止）
     _timer = Timer.periodic(const Duration(milliseconds: 10), (_) {
       if (_measureStartTime != null) {
         setState(() {
