@@ -112,6 +112,16 @@
     var _metronomeInterval = null;
     function playTick() {
       var ctx = getAudioCtx();
+      // ストップウォッチの「カチ」音（プリロード済みならこちらを使う）
+      var buf = _soundBuffers['tick.wav'];
+      if (buf) {
+        var src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(getAudioOutput());
+        src.start(0);
+        return;
+      }
+      // フォールバック: 電子音
       var osc = ctx.createOscillator();
       var gain = ctx.createGain();
       osc.type = 'square';
@@ -155,55 +165,20 @@
       });
     }
 
-    // --- アップテンポBGM（ドラムビート風ループ） ---
-    var _upbeatInterval = null;
-    var _upbeatStep = 0;
-    function _playKick() {
-      var ctx = getAudioCtx();
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(150, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0.8, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc.connect(gain); gain.connect(getAudioOutput());
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
-    }
-    function _playHihat() {
-      var ctx = getAudioCtx();
-      // ノイズをフィルタリングしてハイハット音
-      var bufSize = ctx.sampleRate * 0.03;
-      var buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-      var data = buf.getChannelData(0);
-      for (var i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-      var src = ctx.createBufferSource();
-      src.buffer = buf;
-      var hp = ctx.createBiquadFilter();
-      hp.type = 'highpass'; hp.frequency.value = 7000;
-      var gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-      src.connect(hp); hp.connect(gain); gain.connect(getAudioOutput());
-      src.start(ctx.currentTime);
-    }
+    // --- アップテンポBGM（DOVA-SYNDROME「スピードレース」をループ再生） ---
+    var _upbeatAudio = null;
     function startUpbeat() {
       stopUpbeat();
-      _upbeatStep = 0;
-      var bpm = 200;
-      var stepMs = (60000 / bpm) / 2; // 8分音符単位
-      function step() {
-        // キック: 1拍目と3拍目
-        if (_upbeatStep % 4 === 0) _playKick();
-        // ハイハット: 全8分音符
-        _playHihat();
-        _upbeatStep++;
+      if (!_upbeatAudio) {
+        _upbeatAudio = new Audio('assets/assets/sounds/upbeat.mp3');
+        _upbeatAudio.loop = true;
+        _upbeatAudio.volume = 0.7;
       }
-      step();
-      _upbeatInterval = setInterval(step, stepMs);
+      _upbeatAudio.currentTime = 0;
+      _upbeatAudio.play();
     }
     function stopUpbeat() {
-      if (_upbeatInterval) { clearInterval(_upbeatInterval); _upbeatInterval = null; }
+      if (_upbeatAudio) { _upbeatAudio.pause(); }
     }
 
     // --- スタート音（MP3をWeb Audio APIでプリデコード → 即時再生） ---
@@ -230,7 +205,8 @@
       await Promise.all([
         preloadSound('start01.mp3'),
         preloadSound('start02.mp3'),
-        preloadSound('start03.mp3')
+        preloadSound('start03.mp3'),
+        preloadSound('tick.wav')
       ]);
       console.log('[Audio] All sounds preloaded:', Object.keys(_soundBuffers));
     }
