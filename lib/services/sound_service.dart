@@ -17,7 +17,8 @@ class SoundService {
 
   static const String _whistleAsset = 'sounds/whistle.wav';
   static const String _tickAsset = 'sounds/tick.wav';
-  static const String _upbeatAsset = 'sounds/upbeat.wav';
+  // アップテンポBGM: DOVA-SYNDROME「スピードレース」（商用利用OK・クレジット不要）
+  static const String _upbeatAsset = 'sounds/upbeat.mp3';
 
   /// 全スタート音をプリロード（アプリ起動時・画面表示時に呼ぶ）
   static Future<void> preloadStartSounds() async {
