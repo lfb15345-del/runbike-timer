@@ -330,9 +330,10 @@ class _MeasureScreenState extends State<MeasureScreen>
 
   /// タイムを見やすい文字列に変換
   String _formatTime(int ms) {
+    // 表示は2桁（1/100秒）まで。記録自体はミリ秒精度で保存している
     final seconds = ms ~/ 1000;
-    final millis = ms % 1000;
-    return '${seconds.toString().padLeft(2, '0')}.${millis.toString().padLeft(3, '0')}';
+    final centis = (ms % 1000) ~/ 10;
+    return '${seconds.toString().padLeft(2, '0')}.${centis.toString().padLeft(2, '0')}';
   }
 
   /// スタートボタン押下
@@ -774,11 +775,19 @@ class _MeasureScreenState extends State<MeasureScreen>
                   const Spacer(),
 
                   // --- 中央: タイマー表示（計測中はさらに大きく） ---
-                  Text(
-                    _formatTime(_elapsedMs),
-                    style: AppTheme.timerStyle(
-                      fontSize: isMeasuring ? 88 : 72,
-                      color: isMeasuring ? Colors.green[900] : null,
+                  // FittedBoxで「1行のまま画面幅に収める」（改行・はみ出し防止）
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _formatTime(_elapsedMs),
+                        maxLines: 1,
+                        style: AppTheme.timerStyle(
+                          fontSize: isMeasuring ? 88 : 72,
+                          color: isMeasuring ? Colors.green[900] : null,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),

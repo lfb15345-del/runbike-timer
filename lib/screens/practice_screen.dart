@@ -512,20 +512,28 @@ class _PracticeScreenState extends State<PracticeScreen>
                 // カウントダウン数字
                 if (_phase == PracticePhase.sprint ||
                     _phase == PracticePhase.rest)
-                  Text(
-                    _formatRemaining(_remainingMs),
-                    style: TextStyle(
-                      fontSize: 84,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'Orbitron',
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: _remainingMs <= 3000
-                          ? Colors.yellow
-                          : Colors.white,
-                      shadows: const [
-                        Shadow(blurRadius: 16, color: Colors.black54,
-                            offset: Offset(2, 3)),
-                      ],
+                  // FittedBoxで1行のまま画面幅に収める（改行・はみ出し防止）
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _formatRemaining(_remainingMs),
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 84,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'Orbitron',
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: _remainingMs <= 3000
+                              ? Colors.yellow
+                              : Colors.white,
+                          shadows: const [
+                            Shadow(blurRadius: 16, color: Colors.black54,
+                                offset: Offset(2, 3)),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
 

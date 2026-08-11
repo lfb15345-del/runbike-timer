@@ -77,7 +77,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String _formatTime(int ms) {
     final seconds = ms ~/ 1000;
     final millis = ms % 1000;
-    return '${seconds.toString().padLeft(2, '0')}.${millis.toString().padLeft(3, '0')}';
+    // 表示は2桁（1/100秒）まで。記録自体はミリ秒精度で保存している
+    final centis = millis ~/ 10;
+    return '${seconds.toString().padLeft(2, '0')}.${centis.toString().padLeft(2, '0')}';
   }
 
   /// 速度入力ダイアログ
