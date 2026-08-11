@@ -443,7 +443,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        // 数字はレーシング系フォントで表示（日本語部分は自動でNoto Sansにフォールバック）
+        Text(value,
+            style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Orbitron')),
       ],
     );
   }

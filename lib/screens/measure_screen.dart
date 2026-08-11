@@ -871,7 +871,7 @@ class _MeasureScreenState extends State<MeasureScreen>
                       child: ElevatedButton(
                         onPressed: _onStart,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: AppTheme.brandGreen,
                           foregroundColor: Colors.white,
                         ),
                         child: const Text('スタート（3,2,1,GO!）',
@@ -903,7 +903,7 @@ class _MeasureScreenState extends State<MeasureScreen>
                       child: ElevatedButton(
                         onPressed: _onGoal,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
+                          backgroundColor: AppTheme.goRed,
                           foregroundColor: Colors.white,
                         ),
                         child: const Text('ゴール！',
@@ -975,8 +975,8 @@ class _MeasureScreenState extends State<MeasureScreen>
                       child: ElevatedButton(
                         onPressed: _onCancel,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppTheme.accentAmber,
+                          foregroundColor: const Color(0xFF072016),
                         ),
                         child: const Text('次のレースへ',
                             style: TextStyle(fontSize: 18)),

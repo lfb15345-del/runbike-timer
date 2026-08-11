@@ -51,9 +51,9 @@ class AppTheme {
         ),
       ),
 
-      // 下タブバー
+      // 下タブバー（選択中はアンバーの座布団でレース感を出す）
       navigationBarTheme: NavigationBarThemeData(
-        indicatorColor: brandGreen.withValues(alpha: 0.15),
+        indicatorColor: accentAmber.withValues(alpha: 0.30),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
@@ -72,17 +72,37 @@ class AppTheme {
     );
   }
 
-  /// タイマー表示用の数字スタイル（等幅数字でチラつき防止）
+  /// タイマー表示用の数字スタイル
+  /// レーシング系フォント Orbitron + 等幅数字でチラつき防止
   static TextStyle timerStyle({
     required double fontSize,
     Color? color,
   }) {
     return TextStyle(
       fontSize: fontSize,
-      fontWeight: FontWeight.bold,
-      fontFamily: 'monospace',
+      fontWeight: FontWeight.w700,
+      fontFamily: 'Orbitron',
       fontFeatures: const [FontFeature.tabularFigures()],
+      letterSpacing: 1.0,
       color: color,
+    );
+  }
+
+  /// 英字見出し（READY / GO / FINISH / ROUND など）用のレーシング表示スタイル
+  static TextStyle displayStyle({
+    required double fontSize,
+    Color color = Colors.white,
+    double letterSpacing = 4,
+    FontWeight fontWeight = FontWeight.w800,
+    List<Shadow>? shadows,
+  }) {
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      fontFamily: 'Orbitron',
+      color: color,
+      letterSpacing: letterSpacing,
+      shadows: shadows,
     );
   }
 }

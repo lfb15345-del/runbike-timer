@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'screens/measure_screen.dart';
 import 'screens/practice_screen.dart';
 import 'screens/analysis_screen.dart';
@@ -242,6 +243,20 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // タイマーアプリなので、アプリを開いている間は画面をスリープさせない
+    // （バックグラウンドに回るとOSが自動で解除するので電池の心配は不要）
+    WakelockPlus.enable();
+  }
+
+  @override
+  void dispose() {
+    WakelockPlus.disable();
+    super.dispose();
+  }
+
   final _screens = const [
     MeasureScreen(),
     PracticeScreen(),
@@ -287,18 +302,21 @@ class _HomePageState extends State<HomePage> {
             label: '計測',
           ),
           NavigationDestination(
-            icon: Icon(Icons.fitness_center_outlined),
-            selectedIcon: Icon(Icons.fitness_center),
+            // 稲妻 = ダッシュ練習のイメージ
+            icon: Icon(Icons.bolt_outlined),
+            selectedIcon: Icon(Icons.bolt),
             label: '練習',
           ),
           NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
+            // タイム推移のグラフのイメージ
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights),
             label: '解析・共有',
           ),
           NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
+            // ゴールの旗 = コースのイメージ
+            icon: Icon(Icons.flag_outlined),
+            selectedIcon: Icon(Icons.flag),
             label: 'コース設定',
           ),
         ],

@@ -1,7 +1,7 @@
 ﻿name: runbike_app
-description: "繝ｩ繝ｳ繝舌う繧ｯ邱ｴ鄙偵・繧ｿ繧､繝險域ｸｬ繧｢繝励Μ"
+description: "ランバイク練習・タイム計測アプリ"
 publish_to: 'none'
-version: 1.0.3+8
+version: 1.0.4+9
 
 environment:
   sdk: ^3.11.1
@@ -17,6 +17,7 @@ dependencies:
   flutter_launcher_icons: ^0.14.3
   sqflite: ^2.4.2
   gallery_saver_plus: ^3.0.5
+  wakelock_plus: ^1.2.10
 
 dev_dependencies:
   flutter_test:
@@ -38,3 +39,7 @@ flutter:
     - family: Noto Sans JP
       fonts:
         - asset: assets/fonts/NotoSansJP-VariableFont_wght.ttf
+    # タイム表示・見出し用のレーシング系フォント（SIL OFLライセンス）
+    - family: Orbitron
+      fonts:
+        - asset: assets/fonts/Orbitron-VariableFont_wght.ttf

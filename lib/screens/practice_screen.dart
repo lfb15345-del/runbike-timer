@@ -6,6 +6,7 @@ import '../constants/sound_config.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
 import '../widgets/bt_offset_control.dart';
+import '../theme.dart';
 
 /// インターバル練習の状態
 enum PracticePhase { idle, countdown, sprint, rest, finished }
@@ -514,9 +515,10 @@ class _PracticeScreenState extends State<PracticeScreen>
                   Text(
                     _formatRemaining(_remainingMs),
                     style: TextStyle(
-                      fontSize: 90,
-                      fontWeight: FontWeight.w900,
-                      fontFamily: 'monospace',
+                      fontSize: 84,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Orbitron',
+                      fontFeatures: const [FontFeature.tabularFigures()],
                       color: _remainingMs <= 3000
                           ? Colors.yellow
                           : Colors.white,
@@ -529,8 +531,9 @@ class _PracticeScreenState extends State<PracticeScreen>
 
                 if (_phase == PracticePhase.finished)
                   const Text('FINISH!!',
-                      style: TextStyle(fontSize: 56,
+                      style: TextStyle(fontSize: 48,
                           fontWeight: FontWeight.w900,
+                          fontFamily: 'Orbitron',
                           color: Colors.white,
                           letterSpacing: 4,
                           shadows: [
@@ -552,8 +555,9 @@ class _PracticeScreenState extends State<PracticeScreen>
                     child: Text(
                       'ROUND $_currentRound / $_totalRounds',
                       style: const TextStyle(
-                          fontSize: 18, color: Colors.white,
+                          fontSize: 16, color: Colors.white,
                           fontWeight: FontWeight.w600,
+                          fontFamily: 'Orbitron',
                           letterSpacing: 2),
                     ),
                   ),
@@ -590,7 +594,8 @@ class _PracticeScreenState extends State<PracticeScreen>
     switch (_phase) {
       case PracticePhase.countdown:
         return const Text('READY',
-            style: TextStyle(fontSize: 40, fontWeight: FontWeight.w800,
+            style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800,
+                fontFamily: 'Orbitron',
                 color: Colors.white70, letterSpacing: 8,
                 shadows: [Shadow(blurRadius: 10, color: Colors.black38)]));
       case PracticePhase.sprint:
@@ -602,7 +607,8 @@ class _PracticeScreenState extends State<PracticeScreen>
                 color: _remainingMs <= 3000 ? Colors.yellow : Colors.orangeAccent),
             const SizedBox(width: 8),
             Text('GO',
-                style: TextStyle(fontSize: 44, fontWeight: FontWeight.w900,
+                style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900,
+                    fontFamily: 'Orbitron',
                     color: _remainingMs <= 3000 ? Colors.yellow : Colors.white,
                     letterSpacing: 6,
                     shadows: const [Shadow(blurRadius: 12, color: Colors.black54,
@@ -620,7 +626,8 @@ class _PracticeScreenState extends State<PracticeScreen>
             const Icon(Icons.air, size: 32, color: Colors.white70),
             const SizedBox(width: 8),
             Text('BREAK',
-                style: TextStyle(fontSize: 38, fontWeight: FontWeight.w800,
+                style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800,
+                    fontFamily: 'Orbitron',
                     color: _remainingMs <= 3000 ? Colors.yellow : Colors.white,
                     letterSpacing: 4,
                     shadows: const [Shadow(blurRadius: 10, color: Colors.black38)])),
@@ -662,14 +669,14 @@ class _PracticeScreenState extends State<PracticeScreen>
             child: ElevatedButton(
               onPressed: _onStart,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppTheme.brandGreen,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
               child: const Text('START',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
-                      letterSpacing: 4)),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+                      fontFamily: 'Orbitron', letterSpacing: 4)),
             ),
           ),
         );
@@ -689,8 +696,8 @@ class _PracticeScreenState extends State<PracticeScreen>
                     borderRadius: BorderRadius.circular(16)),
               ),
               child: const Text('STOP',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
-                      letterSpacing: 4)),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+                      fontFamily: 'Orbitron', letterSpacing: 4)),
             ),
           ),
         );
@@ -702,14 +709,15 @@ class _PracticeScreenState extends State<PracticeScreen>
             child: ElevatedButton(
               onPressed: _onReset,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[800],
-                foregroundColor: Colors.white,
+                // ブランドのアンバー（チェッカーフラッグの金色）でレース感を統一
+                backgroundColor: AppTheme.accentAmber,
+                foregroundColor: const Color(0xFF072016),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
               child: const Text('RESET',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold,
-                      letterSpacing: 4)),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+                      fontFamily: 'Orbitron', letterSpacing: 4)),
             ),
           ),
         );
