@@ -51,3 +51,27 @@ class SoundConfig {
   static StartSound byKey(String key) =>
       all.firstWhere((s) => s.key == key, orElse: () => basic);
 }
+
+/// 計測中に流すBGM（走行の疾走感演出用）の定義
+/// 曲はいずれも DOVA-SYNDROME のフリー素材（商用利用OK・クレジット不要）
+class MeasureBgm {
+  final String key;
+  final String label;
+  final String? filename; // assets/sounds/ 直下のファイル名。null = BGMなし
+
+  const MeasureBgm({required this.key, required this.label, this.filename});
+}
+
+/// 計測中BGMのカタログ
+class MeasureBgmConfig {
+  static const none = MeasureBgm(key: 'none', label: 'なし', filename: null);
+  static const speed =
+      MeasureBgm(key: 'speed', label: 'スピード', filename: 'upbeat.mp3');
+  static const rock =
+      MeasureBgm(key: 'rock', label: 'ロック', filename: 'bgm_rock.mp3');
+  static const bit8 =
+      MeasureBgm(key: '8bit', label: '8ビット', filename: 'bgm_8bit.mp3');
+
+  /// 画面に並べる順
+  static const all = [none, speed, rock, bit8];
+}

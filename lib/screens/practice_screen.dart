@@ -39,6 +39,9 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   // スタートの世代番号（連打や「中止→即再スタート」で古い処理が生き残るのを防ぐ）
   int _startGeneration = 0;
+
+  // 一時停止中かどうか（走行中・休憩中のみ一時停止できる）
+  bool _isPaused = false;
   int _currentRound = 1;
   int _remainingMs = 0;
   Timer? _timer;
@@ -99,6 +102,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     setState(() {
       _phase = PracticePhase.countdown;
       _currentRound = 1;
+      _isPaused = false;
       PracticeScreen.isRunning = true;
     });
 
@@ -143,7 +147,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     // ビープ音（start02.mp3）のGO!直後 → ホイッスルは鳴らさない
     // ビープ音の余韻が完全に消えてからBGM開始（2秒待つ）
     Future.delayed(const Duration(milliseconds: 2000), () {
-      if (_phase == PracticePhase.sprint) _startBgm();
+      if (_phase == PracticePhase.sprint && !_isPaused) _startBgm();
     });
     _startCountdownTimer();
   }
@@ -233,6 +237,7 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.idle;
       _currentRound = 1;
       _remainingMs = 0;
+      _isPaused = false;
       PracticeScreen.isRunning = false;
     });
   }
@@ -242,8 +247,34 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.idle;
       _currentRound = 1;
       _remainingMs = 0;
+      _isPaused = false;
       PracticeScreen.isRunning = false;
     });
+  }
+
+  /// 一時停止（走行中・休憩中のみ）: タイマーとBGMを止めて現状維持
+  void _onPause() {
+    if (_phase != PracticePhase.sprint && _phase != PracticePhase.rest) return;
+    if (_isPaused) return;
+    _timer?.cancel();
+    SoundService.pauseBgm();
+    _pulseController.stop();
+    setState(() => _isPaused = true);
+  }
+
+  /// 一時停止からの再開: 残り時間の続きからタイマーとBGMを再開
+  void _onResume() {
+    if (!_isPaused) return;
+    setState(() => _isPaused = false);
+    // BGMを再開（走行中のみ。休憩中はもともとBGMなし）
+    if (_phase == PracticePhase.sprint) {
+      if (_bgmType == 'metronome') {
+        SoundService.startMetronome(_metronomeBpm);
+      } else if (_bgmType == 'upbeat') {
+        SoundService.resumeUpbeat(); // 曲の続きから
+      }
+    }
+    _startCountdownTimer(); // 現在の残り時間から再開
   }
 
   double get _overallProgress {
@@ -689,8 +720,7 @@ class _PracticeScreenState extends State<PracticeScreen>
           ),
         );
       case PracticePhase.countdown:
-      case PracticePhase.sprint:
-      case PracticePhase.rest:
+        // カウントダウン中は中止のみ（スタート音再生中のため一時停止は不可）
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: SizedBox(
@@ -707,6 +737,58 @@ class _PracticeScreenState extends State<PracticeScreen>
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
                       fontFamily: 'Orbitron', letterSpacing: 4)),
             ),
+          ),
+        );
+      case PracticePhase.sprint:
+      case PracticePhase.rest:
+        // 一時停止（または再開）と STOP を横並びで表示
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 60,
+                  child: ElevatedButton.icon(
+                    onPressed: _isPaused ? _onResume : _onPause,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isPaused
+                          ? AppTheme.accentAmber
+                          : Colors.blueGrey[700],
+                      foregroundColor: _isPaused
+                          ? const Color(0xFF072016)
+                          : Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause,
+                        size: 26),
+                    label: Text(_isPaused ? '再開' : '一時停止',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 60,
+                  child: ElevatedButton(
+                    onPressed: _onCancel,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[900],
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text('STOP',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold,
+                            fontFamily: 'Orbitron', letterSpacing: 3)),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       case PracticePhase.finished:

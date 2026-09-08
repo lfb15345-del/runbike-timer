@@ -41,6 +41,9 @@ class _MeasureScreenState extends State<MeasureScreen>
   // 選択中のスタート音（定義は SoundConfig に一元化）
   StartSound _selectedSound = SoundConfig.basic;
 
+  // 選択中の計測中BGM（走行の疾走感演出。デフォルトはなし）
+  MeasureBgm _selectedBgm = MeasureBgmConfig.none;
+
   // タイマー関連
   Timer? _timer;
   DateTime? _measureStartTime;
@@ -386,6 +389,11 @@ class _MeasureScreenState extends State<MeasureScreen>
       _elapsedMs = 0;
     });
 
+    // 計測中BGM: 選択されていればGO!と同時にループ再生
+    if (_selectedBgm.filename != null) {
+      SoundService.startMeasureBgm(_selectedBgm.filename!);
+    }
+
     _timer?.cancel(); // 古いタイマーが残っていたら止める（表示ずれ防止）
     _timer = Timer.periodic(const Duration(milliseconds: 10), (_) {
       if (_measureStartTime != null) {
@@ -444,6 +452,7 @@ class _MeasureScreenState extends State<MeasureScreen>
     final finalTime =
         DateTime.now().difference(_measureStartTime!).inMilliseconds;
     _timer?.cancel();
+    SoundService.stopBgm(); // 計測中BGMを停止
 
     // 録画中なら停止（プレビューはまだ出さない）
     final hadRecording = _isVideoRecording;
@@ -826,6 +835,40 @@ class _MeasureScreenState extends State<MeasureScreen>
                         );
                       }).toList(),
                     ),
+
+                  // --- 計測中BGM選択（走行の疾走感演出。計測中は非表示） ---
+                  if (!isMeasuring) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.music_note, size: 16,
+                            color: Colors.grey),
+                        const SizedBox(width: 2),
+                        const Text('走行中BGM:',
+                            style:
+                                TextStyle(fontSize: 12, color: Colors.grey)),
+                        const SizedBox(width: 4),
+                        ...MeasureBgmConfig.all.map((bgm) {
+                          final isSelected = _selectedBgm.key == bgm.key;
+                          return Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 2),
+                            child: ChoiceChip(
+                              label: Text(bgm.label,
+                                  style: const TextStyle(fontSize: 12)),
+                              visualDensity: VisualDensity.compact,
+                              selected: isSelected,
+                              onSelected: _state == TimerState.waiting
+                                  ? (_) =>
+                                      setState(() => _selectedBgm = bgm)
+                                  : null,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ],
 
                   if (!isMeasuring) const SizedBox(height: 8),
 

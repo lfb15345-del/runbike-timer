@@ -46,6 +46,27 @@ class WebAudioService {
     } catch (_) {}
   }
 
+  /// アップテンポBGMを一時停止位置から再開
+  static void resumeUpbeat() {
+    try {
+      globalContext.callMethod('resumeUpbeat'.toJS);
+    } catch (_) {}
+  }
+
+  /// 計測中BGM（任意の曲ファイル）をループ再生
+  static void startBgmLoop(String filename) {
+    try {
+      globalContext.callMethod('startBgmLoop'.toJS, filename.toJS);
+    } catch (_) {}
+  }
+
+  /// 計測中BGMを停止
+  static void stopBgmLoop() {
+    try {
+      globalContext.callMethod('stopBgmLoop'.toJS);
+    } catch (_) {}
+  }
+
   /// 全BGM・効果音を停止
   static void stopAll() {
     try {

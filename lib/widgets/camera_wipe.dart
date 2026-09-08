@@ -3,8 +3,9 @@ import 'package:camera/camera.dart';
 
 /// カメラプレビューのワイプ表示（ネイティブ版のみ）
 /// - 指2本でピンチ → カメラのデジタルズーム
-/// - 1本指でドラッグ → ワイプを画面内で移動
-/// - 右下のリサイズハンドル(↘) → ワイプサイズ変更
+/// - 1本指でドラッグ → ワイプを移動（画面の外へ滑らせて隠すこともできる。
+///   端に少しだけ残るので、それを引っ張れば戻せる）
+/// - 右下のリサイズハンドル(↘) → ワイプサイズ変更（縦横比はカメラに合わせて固定）
 /// - 右上の📷ボタン → 前面/背面カメラ切替
 class CameraWipe extends StatefulWidget {
   final CameraController controller;
@@ -31,21 +32,33 @@ class _CameraWipeState extends State<CameraWipe> {
   double? _left; // null = 初回表示時に画面右端に配置
   double _top = 8;
   double _width = 140;
-  double _height = 200;
+
+  // 画面外に隠したときに端に残す「つまみ」の幅
+  static const double _peek = 36;
 
   // ピンチ検出用: アクティブなタッチポインタを追跡（Listener使用）
   final Map<int, Offset> _pointers = {};
   double _pinchInitDist = 0;
   double _zoomStart = 1.0;
 
+  /// カメラの縦横比に合わせた高さ（アスペクト比固定・映像が歪まない）
+  double get _height {
+    final ratio = widget.controller.value.aspectRatio;
+    // aspectRatio はセンサーの横/縦。縦持ち表示では縦長になる
+    return ratio > 0 ? _width * ratio : _width * 1.4;
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     _left ??= screenSize.width - _width - 8;
-    // 画面外にはみ出さないようクランプ
-    final maxLeft = (screenSize.width - _width).clamp(0.0, double.infinity);
-    final maxTop = (screenSize.height - _height - 80).clamp(0.0, double.infinity);
-    final left = _left!.clamp(0.0, maxLeft);
+    // YouTubeのミニプレイヤー風に、左右は画面の外までスライド可能
+    // （_peek 分だけ端に残るので、引っ張れば戻せる）
+    final minLeft = -(_width - _peek);
+    final maxLeft = screenSize.width - _peek;
+    final maxTop =
+        (screenSize.height - 80 - _peek).clamp(0.0, double.infinity);
+    final left = _left!.clamp(minLeft, maxLeft);
     final top = _top.clamp(0.0, maxTop);
 
     return Positioned(
@@ -87,10 +100,9 @@ class _CameraWipeState extends State<CameraWipe> {
             onPanUpdate: (details) {
               if (_pointers.length >= 2) return; // ピンチ中は移動しない
               setState(() {
-                _left = (left + details.delta.dx)
-                    .clamp(0.0, screenSize.width - _width);
-                _top = (top + details.delta.dy)
-                    .clamp(0.0, screenSize.height - _height - 80);
+                // 左右は画面外まで許可（つまみ分だけ残る）
+                _left = (left + details.delta.dx).clamp(minLeft, maxLeft);
+                _top = (top + details.delta.dy).clamp(0.0, maxTop);
               });
             },
             child: Container(
@@ -182,10 +194,9 @@ class _CameraWipeState extends State<CameraWipe> {
                         behavior: HitTestBehavior.opaque,
                         onPanUpdate: (details) {
                           setState(() {
+                            // 幅だけ変更し、高さはカメラの縦横比から自動計算（歪み防止）
                             _width = (_width + details.delta.dx)
                                 .clamp(80.0, screenSize.width - 16);
-                            _height = (_height + details.delta.dy)
-                                .clamp(100.0, screenSize.height - 100);
                           });
                         },
                         child: Container(

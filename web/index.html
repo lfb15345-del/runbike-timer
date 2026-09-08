@@ -142,27 +142,33 @@
       if (_metronomeInterval) { clearInterval(_metronomeInterval); _metronomeInterval = null; }
     }
 
-    // --- ホイッスル（エアホーン風ブザー） ---
+    // --- 終了の合図音（高い「カンカンカン」という鐘の音） ---
     function playWhistle() {
       var ctx = getAudioCtx();
-      var t = ctx.currentTime;
-      var dur = 0.8;
-      var whistleGain = ctx.createGain();
-      whistleGain.gain.setValueAtTime(0, t);
-      whistleGain.gain.linearRampToValueAtTime(0.6, t + 0.02);
-      whistleGain.gain.setValueAtTime(0.6, t + dur - 0.2);
-      whistleGain.gain.linearRampToValueAtTime(0, t + dur);
-      whistleGain.connect(getAudioOutput());
-      // 複数のオシレーターで太い音
-      [220, 330, 440, 277].forEach(function(freq, i) {
-        var osc = ctx.createOscillator();
-        var g = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.value = freq;
-        g.gain.value = i === 0 ? 0.3 : 0.15;
-        osc.connect(g); g.connect(whistleGain);
-        osc.start(t); osc.stop(t + dur);
-      });
+      // 合成済みのベル音（whistle.wav）をプリロードしてあればそれを鳴らす
+      var buf = _soundBuffers['whistle.wav'];
+      if (buf) {
+        var src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(getAudioOutput());
+        src.start(0);
+        return;
+      }
+      // フォールバック: 高い鐘の音を簡易合成（2.1kHz中心・3回打つ）
+      for (var k = 0; k < 3; k++) {
+        var t = ctx.currentTime + k * 0.3;
+        [2100, 2650, 3350, 4200].forEach(function(freq, i) {
+          var osc = ctx.createOscillator();
+          var g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          var amp = i === 0 ? 0.5 : 0.5 / (i + 1);
+          g.gain.setValueAtTime(amp, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+          osc.connect(g); g.connect(getAudioOutput());
+          osc.start(t); osc.stop(t + 0.3);
+        });
+      }
     }
 
     // --- アップテンポBGM（DOVA-SYNDROME「スピードレース」をループ再生） ---
@@ -179,6 +185,23 @@
     }
     function stopUpbeat() {
       if (_upbeatAudio) { _upbeatAudio.pause(); }
+    }
+    // 一時停止からの再開（曲の続きから鳴らす。startUpbeatは頭から鳴らし直す）
+    function resumeUpbeat() {
+      if (_upbeatAudio) { _upbeatAudio.play(); } else { startUpbeat(); }
+    }
+
+    // --- 計測中BGM（任意の曲ファイルをループ再生） ---
+    var _bgmLoopAudio = null;
+    function startBgmLoop(filename) {
+      stopBgmLoop();
+      _bgmLoopAudio = new Audio('assets/assets/sounds/' + filename);
+      _bgmLoopAudio.loop = true;
+      _bgmLoopAudio.volume = 0.7;
+      _bgmLoopAudio.play();
+    }
+    function stopBgmLoop() {
+      if (_bgmLoopAudio) { _bgmLoopAudio.pause(); _bgmLoopAudio = null; }
     }
 
     // --- スタート音（MP3をWeb Audio APIでプリデコード → 即時再生） ---
@@ -206,7 +229,8 @@
         preloadSound('start01.mp3'),
         preloadSound('start02.mp3'),
         preloadSound('start03.mp3'),
-        preloadSound('tick.wav')
+        preloadSound('tick.wav'),
+        preloadSound('whistle.wav')
       ]);
       console.log('[Audio] All sounds preloaded:', Object.keys(_soundBuffers));
     }
@@ -241,6 +265,7 @@
     function stopAllSounds() {
       stopMetronome();
       stopUpbeat();
+      stopBgmLoop();
       stopSoundBuffer();
     }
 

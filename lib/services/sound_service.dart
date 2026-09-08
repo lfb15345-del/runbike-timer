@@ -94,11 +94,46 @@ class SoundService {
     if (kIsWeb) {
       WebAudioService.stopMetronome();
       WebAudioService.stopUpbeat();
+      WebAudioService.stopBgmLoop();
     } else {
       _metronomeTimer?.cancel();
       _metronomeTimer = null;
       _bgmPlayer.stop();
       _tickPlayer.stop();
+    }
+  }
+
+  /// BGMを一時停止（練習の一時停止用。曲は続きから再開できる）
+  static void pauseBgm() {
+    if (kIsWeb) {
+      WebAudioService.stopMetronome();
+      WebAudioService.stopUpbeat(); // pause扱い（再生位置は保持される）
+    } else {
+      _metronomeTimer?.cancel();
+      _metronomeTimer = null;
+      _tickPlayer.stop();
+      _bgmPlayer.pause();
+    }
+  }
+
+  /// 一時停止したアップテンポBGMを続きから再開
+  static void resumeUpbeat() {
+    if (kIsWeb) {
+      WebAudioService.resumeUpbeat();
+    } else {
+      _bgmPlayer.resume();
+    }
+  }
+
+  /// 計測中BGMをループ再生（走行の疾走感演出用）
+  /// [filename] は assets/sounds/ 直下のファイル名（例: 'upbeat.mp3'）
+  static void startMeasureBgm(String filename) {
+    stopBgm();
+    if (kIsWeb) {
+      WebAudioService.startBgmLoop(filename);
+    } else {
+      _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+      _bgmPlayer.play(AssetSource('sounds/$filename'));
     }
   }
 

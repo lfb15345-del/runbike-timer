@@ -7,6 +7,9 @@ class WebAudioService {
   static void stopMetronome() {}
   static void startUpbeat() {}
   static void stopUpbeat() {}
+  static void resumeUpbeat() {}
+  static void startBgmLoop(String filename) {}
+  static void stopBgmLoop() {}
   static void stopAll() {}
   static void preloadSound(String filename) {}
   static Future<void> preloadAllSounds() async {}
