@@ -154,9 +154,9 @@
         src.start(0);
         return;
       }
-      // フォールバック: 高い鐘の音を簡易合成（2.1kHz中心・3回打つ）
-      for (var k = 0; k < 3; k++) {
-        var t = ctx.currentTime + k * 0.3;
+      // フォールバック: 高い鐘の音を簡易合成（2.1kHz中心・6連打）
+      for (var k = 0; k < 6; k++) {
+        var t = ctx.currentTime + k * 0.26;
         [2100, 2650, 3350, 4200].forEach(function(freq, i) {
           var osc = ctx.createOscillator();
           var g = ctx.createGain();
