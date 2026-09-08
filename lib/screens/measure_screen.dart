@@ -12,6 +12,7 @@ import '../services/app_settings.dart';
 import '../services/web_camera_service.dart';
 import '../widgets/bt_offset_control.dart';
 import '../widgets/camera_wipe.dart';
+import '../widgets/timer_text.dart';
 import '../theme.dart';
 
 /// タイマーの状態
@@ -784,14 +785,14 @@ class _MeasureScreenState extends State<MeasureScreen>
                   const Spacer(),
 
                   // --- 中央: タイマー表示（計測中はさらに大きく） ---
-                  // FittedBoxで「1行のまま画面幅に収める」（改行・はみ出し防止）
+                  // TimerText = 1文字ずつ固定幅で描いて震えを防止
+                  // FittedBox = 1行のまま画面幅に収める（改行・はみ出し防止）
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(
+                      child: TimerText(
                         _formatTime(_elapsedMs),
-                        maxLines: 1,
                         style: AppTheme.timerStyle(
                           fontSize: isMeasuring ? 88 : 72,
                           color: isMeasuring ? Colors.green[900] : null,
@@ -837,33 +838,29 @@ class _MeasureScreenState extends State<MeasureScreen>
                     ),
 
                   // --- 計測中BGM選択（走行の疾走感演出。計測中は非表示） ---
+                  // Wrapで狭い画面でも見切れず折り返す
                   if (!isMeasuring) ...[
                     const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 4,
                       children: [
                         const Icon(Icons.music_note, size: 16,
                             color: Colors.grey),
-                        const SizedBox(width: 2),
                         const Text('走行中BGM:',
                             style:
                                 TextStyle(fontSize: 12, color: Colors.grey)),
-                        const SizedBox(width: 4),
                         ...MeasureBgmConfig.all.map((bgm) {
                           final isSelected = _selectedBgm.key == bgm.key;
-                          return Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 2),
-                            child: ChoiceChip(
-                              label: Text(bgm.label,
-                                  style: const TextStyle(fontSize: 12)),
-                              visualDensity: VisualDensity.compact,
-                              selected: isSelected,
-                              onSelected: _state == TimerState.waiting
-                                  ? (_) =>
-                                      setState(() => _selectedBgm = bgm)
-                                  : null,
-                            ),
+                          return ChoiceChip(
+                            label: Text(bgm.label,
+                                style: const TextStyle(fontSize: 12)),
+                            visualDensity: VisualDensity.compact,
+                            selected: isSelected,
+                            onSelected: _state == TimerState.waiting
+                                ? (_) => setState(() => _selectedBgm = bgm)
+                                : null,
                           );
                         }),
                       ],

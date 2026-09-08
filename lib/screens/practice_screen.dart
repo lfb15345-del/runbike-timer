@@ -6,6 +6,7 @@ import '../constants/sound_config.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
 import '../widgets/bt_offset_control.dart';
+import '../widgets/timer_text.dart';
 import '../theme.dart';
 
 /// インターバル練習の状態
@@ -543,19 +544,18 @@ class _PracticeScreenState extends State<PracticeScreen>
                 // カウントダウン数字
                 if (_phase == PracticePhase.sprint ||
                     _phase == PracticePhase.rest)
+                  // TimerText = 1文字ずつ固定幅で描いて震えを防止
                   // FittedBoxで1行のまま画面幅に収める（改行・はみ出し防止）
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(
+                      child: TimerText(
                         _formatRemaining(_remainingMs),
-                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 84,
                           fontWeight: FontWeight.w800,
                           fontFamily: 'Orbitron',
-                          fontFeatures: const [FontFeature.tabularFigures()],
                           color: _remainingMs <= 3000
                               ? Colors.yellow
                               : Colors.white,
