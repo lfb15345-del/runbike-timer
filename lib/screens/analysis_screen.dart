@@ -6,6 +6,11 @@ import '../services/database_service.dart';
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
 
+  /// このタブが開かれたときに最新データを読み直すための合図。
+  /// main.dart のタブ切替処理が値を増やすと、画面がデータを再読み込みする
+  /// （従来は起動時の1回しか読み込まれず、計測後のタイムが反映されなかった）
+  static final ValueNotifier<int> refreshTick = ValueNotifier<int>(0);
+
   @override
   State<AnalysisScreen> createState() => _AnalysisScreenState();
 }
@@ -25,6 +30,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   void initState() {
     super.initState();
     _loadChildren();
+    // タブが開かれるたびに最新データを読み直す
+    AnalysisScreen.refreshTick.addListener(_onRefreshRequested);
+  }
+
+  @override
+  void dispose() {
+    AnalysisScreen.refreshTick.removeListener(_onRefreshRequested);
+    super.dispose();
+  }
+
+  void _onRefreshRequested() {
+    if (mounted) _loadChildren();
   }
 
   Future<void> _loadChildren() async {
@@ -39,7 +56,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final sharedName = DatabaseService.selectedChildName;
       if (sharedId != null && children.any((c) => c['id'] == sharedId)) {
         await _selectChild(sharedId, sharedName!);
-      } else if (_selectedChildId == null) {
+      } else if (_selectedChildId != null &&
+          children.any((c) => c['id'] == _selectedChildId)) {
+        // すでに選択中の子がいれば、その子のデータを読み直す（再読み込み対応）
+        await _selectChild(_selectedChildId!, _selectedChildName);
+      } else {
         await _selectChild(
           children.first['id'] as int,
           children.first['name'] as String,

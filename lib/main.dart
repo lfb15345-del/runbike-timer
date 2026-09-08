@@ -280,6 +280,10 @@ class _HomePageState extends State<HomePage> {
     if (kIsWeb) {
       WebCameraService.setPreviewVisible(index == 0);
     }
+    // 解析・共有タブを開いたら最新の記録を読み直す
+    if (index == 2) {
+      AnalysisScreen.refreshTick.value++;
+    }
     setState(() => _currentIndex = index);
   }
 
