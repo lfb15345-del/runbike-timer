@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:gallery_saver_plus/gallery_saver.dart';
+import 'package:gal/gal.dart';
 import '../constants/sound_config.dart';
 import '../services/database_service.dart';
 import '../services/sound_service.dart';
@@ -17,6 +17,9 @@ import '../theme.dart';
 
 /// タイマーの状態
 enum TimerState { waiting, countdown, measuring }
+
+/// 録画した動画の保存先（写真アプリ / 許可なしで失敗 / アプリ内に退避）
+enum _VideoSaveResult { gallery, denied, appFolder }
 
 /// 計測タブ（メイン画面）
 class MeasureScreen extends StatefulWidget {
@@ -223,11 +226,18 @@ class _MeasureScreenState extends State<MeasureScreen>
       final xFile = await _cameraController!.stopVideoRecording();
       setState(() => _isVideoRecording = false);
 
-      final savedPath = await _saveVideoToStorage(xFile.path);
-      if (savedPath == 'gallery') {
-        _showMessage('動画を写真アプリに保存しました');
-      } else {
-        _showMessage('動画を保存しました: ${savedPath.split('/').last}');
+      final result = await _saveVideoToStorage(xFile.path);
+      switch (result) {
+        case _VideoSaveResult.gallery:
+          _showMessage('動画を写真アプリに保存しました（アルバム「ランバイクタイマー」）');
+        case _VideoSaveResult.denied:
+          _showMessage(
+            '写真へのアクセスが許可されていないため、写真アプリに保存できませんでした。\n'
+            '設定 → ランバイクタイマー → 写真 を「フルアクセス」にしてください',
+            seconds: 8,
+          );
+        case _VideoSaveResult.appFolder:
+          _showMessage('写真アプリに保存できなかったため、アプリ内に退避しました', seconds: 5);
       }
     } catch (e) {
       debugPrint('録画停止エラー: $e');
@@ -237,25 +247,45 @@ class _MeasureScreenState extends State<MeasureScreen>
   }
 
   /// 動画ファイルを写真アプリ（ギャラリー）に保存
-  Future<String> _saveVideoToStorage(String tempPath) async {
-    if (kIsWeb) return tempPath;
+  /// 1. アルバム付きで保存（写真への「フルアクセス」が必要）
+  /// 2. ダメならアルバムなしで保存（「追加のみ」の許可でも通る）
+  /// 3. それでもダメならアプリ内フォルダに退避
+  Future<_VideoSaveResult> _saveVideoToStorage(String tempPath) async {
+    if (kIsWeb) return _VideoSaveResult.appFolder;
 
+    var accessDenied = false;
     try {
-      // ギャラリー（写真アプリ）に保存
-      final success = await GallerySaver.saveVideo(
-        tempPath,
-        albumName: 'ランバイクタイマー',
-      );
-
-      if (success == true) {
-        // 一時ファイルを削除
-        try {
-          await File(tempPath).delete();
-        } catch (_) {}
-        return 'gallery'; // ギャラリー保存成功
+      // 許可がなければこの場で求める（初回はiOSのダイアログが出る）
+      if (!await Gal.hasAccess(toAlbum: true)) {
+        await Gal.requestAccess(toAlbum: true);
       }
+      await Gal.putVideo(tempPath, album: 'ランバイクタイマー');
+      try {
+        await File(tempPath).delete();
+      } catch (_) {}
+      return _VideoSaveResult.gallery;
+    } on GalException catch (e) {
+      debugPrint('ギャラリー保存エラー（アルバム付き）: ${e.type}');
+      accessDenied = e.type == GalExceptionType.accessDenied;
     } catch (e) {
-      debugPrint('ギャラリー保存エラー: $e');
+      debugPrint('ギャラリー保存エラー（アルバム付き）: $e');
+    }
+
+    // アルバム作成には「フルアクセス」が要るので、「追加のみ」許可の場合はここで通る
+    try {
+      if (!await Gal.hasAccess()) {
+        await Gal.requestAccess();
+      }
+      await Gal.putVideo(tempPath);
+      try {
+        await File(tempPath).delete();
+      } catch (_) {}
+      return _VideoSaveResult.gallery;
+    } on GalException catch (e) {
+      debugPrint('ギャラリー保存エラー（アルバムなし）: ${e.type}');
+      accessDenied = accessDenied || e.type == GalExceptionType.accessDenied;
+    } catch (e) {
+      debugPrint('ギャラリー保存エラー（アルバムなし）: $e');
     }
 
     // フォールバック: アプリ固有フォルダに保存
@@ -279,11 +309,10 @@ class _MeasureScreenState extends State<MeasureScreen>
       try {
         await tempFile.delete();
       } catch (_) {}
-      return savePath;
     } catch (e) {
       debugPrint('動画保存エラー: $e');
-      return tempPath;
     }
+    return accessDenied ? _VideoSaveResult.denied : _VideoSaveResult.appFolder;
   }
 
   /// 録画スイッチのON/OFF
@@ -535,9 +564,9 @@ class _MeasureScreenState extends State<MeasureScreen>
   }
 
   /// メッセージ表示
-  void _showMessage(String msg) {
+  void _showMessage(String msg, {int seconds = 2}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+      SnackBar(content: Text(msg), duration: Duration(seconds: seconds)),
     );
   }
 
