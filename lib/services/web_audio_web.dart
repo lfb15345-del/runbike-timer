@@ -99,6 +99,13 @@ class WebAudioService {
     } catch (_) {}
   }
 
+  /// 効果音を再生（他の音を止めずに重ねて鳴らす）
+  static void playEffect(String filename) {
+    try {
+      globalContext.callMethod('playEffect'.toJS, filename.toJS);
+    } catch (_) {}
+  }
+
   /// 再生中のサウンドバッファを停止
   static void stopSoundBuffer() {
     try {

@@ -230,12 +230,25 @@
         preloadSound('start02.mp3'),
         preloadSound('start03.mp3'),
         preloadSound('tick.wav'),
-        preloadSound('whistle.wav')
+        preloadSound('whistle.wav'),
+        preloadSound('ref_whistle.wav')
       ]);
       console.log('[Audio] All sounds preloaded:', Object.keys(_soundBuffers));
     }
 
     // プリロード済みバッファから即時再生（レイテンシーほぼゼロ）
+    // 効果音を鳴らす（スタート音と違い、再生中の他の音は止めない。連打しても重ねて鳴る）
+    function playEffect(filename) {
+      var buffer = _soundBuffers[filename];
+      if (!buffer) { preloadSound(filename); return false; }
+      var ctx = getAudioCtx();
+      var source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(getAudioOutput());
+      source.start(0);
+      return true;
+    }
+
     function playSoundBuffer(filename) {
       stopSoundBuffer();
       var buffer = _soundBuffers[filename];

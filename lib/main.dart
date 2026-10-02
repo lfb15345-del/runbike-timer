@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'screens/measure_screen.dart';
 import 'screens/practice_screen.dart';
@@ -7,6 +8,7 @@ import 'screens/analysis_screen.dart';
 import 'screens/course_screen.dart';
 import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
+import 'services/sound_service.dart';
 import 'services/web_camera_service.dart';
 import 'theme.dart';
 import 'widgets/runbike_mark.dart';
@@ -264,8 +266,17 @@ class _HomePageState extends State<HomePage> {
     CourseScreen(),
   ];
 
+  /// 下タブの一番右はタブではなく「ホイッスルボタン」
+  static const int _whistleIndex = 4;
+
   /// タイマー実行中はタブ切替をブロック
   void _onTabTapped(int index) {
+    // ホイッスルは画面を切り替えずに鳴らすだけ（計測中・練習中でも鳴らせる）
+    if (index == _whistleIndex) {
+      HapticFeedback.mediumImpact();
+      SoundService.playRefereeWhistle();
+      return;
+    }
     // 計測中 or 練習中はタブ切替を防止
     if (MeasureScreen.isRunning || PracticeScreen.isRunning) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -322,6 +333,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.flag_outlined),
             selectedIcon: Icon(Icons.flag),
             label: 'コース設定',
+          ),
+          NavigationDestination(
+            // 押すと「ピーーッ」と鳴るだけのボタン（画面は切り替わらない）
+            icon: Icon(Icons.sports, color: AppTheme.goRed),
+            label: 'ホイッスル',
           ),
         ],
       ),

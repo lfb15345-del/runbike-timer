@@ -13,6 +13,8 @@ class SoundService {
   static final AudioPlayer _whistlePlayer = AudioPlayer();
   static final AudioPlayer _bgmPlayer = AudioPlayer();
   static final AudioPlayer _tickPlayer = AudioPlayer();
+  static final AudioPlayer _refWhistlePlayer = AudioPlayer();
+  static const String _refWhistleAsset = 'sounds/ref_whistle.wav';
   static Timer? _metronomeTimer;
 
   static const String _whistleAsset = 'sounds/whistle.wav';
@@ -60,6 +62,19 @@ class SoundService {
       WebAudioService.playWhistle();
     } else {
       _whistlePlayer.play(AssetSource(_whistleAsset));
+    }
+  }
+
+  /// 審判ホイッスル「ピーーッ」（計測とは無関係にいつでも鳴らせる）
+  /// 他の音（BGM・スタート音）は止めずに重ねて鳴らす
+  static void playRefereeWhistle() {
+    if (kIsWeb) {
+      WebAudioService.playEffect('ref_whistle.wav');
+    } else {
+      // 連打したら頭から鳴らし直す
+      _refWhistlePlayer
+          .stop()
+          .then((_) => _refWhistlePlayer.play(AssetSource(_refWhistleAsset)));
     }
   }
 
