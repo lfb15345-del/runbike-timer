@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import '../constants/sound_config.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
+import '../services/practice_recorder.dart';
+import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
+import '../widgets/camera_wipe.dart';
 import '../widgets/timer_text.dart';
 import '../theme.dart';
 
@@ -24,7 +28,11 @@ class PracticeScreen extends StatefulWidget {
 }
 
 class _PracticeScreenState extends State<PracticeScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  // --- 録画（走る区間ごとに1本ずつ。ネイティブ版のみ） ---
+  bool _isRecordingEnabled = false;
+  final PracticeRecorder _recorder = PracticeRecorder();
+
   // --- 練習設定 ---
   int _sprintSec = 20;
   int _restSec = 40;
@@ -66,15 +74,84 @@ class _PracticeScreenState extends State<PracticeScreen>
       duration: const Duration(milliseconds: 400),
     );
     SoundService.preloadStartSounds();
+    WidgetsBinding.instance.addObserver(this);
+    _recorder.addListener(_onRecorderChanged);
+    AppSettings.currentTab.addListener(_onTabChanged);
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     SoundService.stopAll();
+    WidgetsBinding.instance.removeObserver(this);
+    AppSettings.currentTab.removeListener(_onTabChanged);
+    _recorder.removeListener(_onRecorderChanged);
+    _recorder.dispose();
     _speedLineController.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  // ========================================
+  //  録画（ネイティブ版のみ）
+  // ========================================
+
+  void _onRecorderChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 録画スイッチのON/OFF（ONの間はカメラ映像の小窓が出る）
+  void _toggleRecording(bool value) {
+    setState(() => _isRecordingEnabled = value);
+    if (value) {
+      _recorder.open();
+    } else {
+      _recorder.close();
+    }
+  }
+
+  /// 練習タブを離れたらカメラを手放し、戻ってきたら付け直す
+  /// （計測タブも同じカメラを使うため、同時に持たないようにする）
+  void _onTabChanged() {
+    if (!_isRecordingEnabled) return;
+    if (AppSettings.currentTab.value == 1) {
+      _recorder.open();
+    } else {
+      _recorder.close();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_isRecordingEnabled) return;
+    // 「paused」= ホームに戻った等。カメラ許可ダイアログ表示中（inactive）では閉じない
+    if (state == AppLifecycleState.paused) {
+      _recorder.close();
+    } else if (state == AppLifecycleState.resumed &&
+        AppSettings.currentTab.value == 1) {
+      _recorder.open();
+    }
+  }
+
+  /// 練習終了・中止のあとに、保存した動画の本数を知らせる
+  Future<void> _reportSavedClips() async {
+    if (!_isRecordingEnabled) return;
+    await _recorder.waitIdle();
+    if (!mounted) return;
+    final String? msg;
+    if (_recorder.accessDenied) {
+      msg = VideoSaver.deniedMessage;
+    } else if (_recorder.savedCount > 0) {
+      msg = '走りの動画を${_recorder.savedCount}本、写真アプリに保存しました'
+          '（アルバム「ランバイクタイマー」）';
+    } else {
+      msg = null;
+    }
+    if (msg == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      duration: Duration(seconds: _recorder.accessDenied ? 8 : 4),
+    ));
   }
 
   /// 合計時間を計算
@@ -106,6 +183,7 @@ class _PracticeScreenState extends State<PracticeScreen>
       _isPaused = false;
       PracticeScreen.isRunning = true;
     });
+    if (_isRecordingEnabled) _recorder.resetCount();
 
     final playStartTime = DateTime.now();
     SoundService.playStartSound(_startSound);
@@ -145,6 +223,8 @@ class _PracticeScreenState extends State<PracticeScreen>
       _phase = PracticePhase.sprint;
       _remainingMs = _sprintSec * 1000;
     });
+    // GO!と同時にこの区間の録画を開始
+    if (_isRecordingEnabled) _recorder.start();
     // ビープ音（start02.mp3）のGO!直後 → ホイッスルは鳴らさない
     // ビープ音の余韻が完全に消えてからBGM開始（2秒待つ）
     Future.delayed(const Duration(milliseconds: 2000), () {
@@ -154,6 +234,8 @@ class _PracticeScreenState extends State<PracticeScreen>
   }
 
   void _startRest() {
+    // 走る区間が終わったので録画を止めて保存（休憩中は録らない）
+    if (_isRecordingEnabled) _recorder.stop();
     // BGM停止 → ホイッスル音
     SoundService.stopBgm();
     SoundService.playWhistle();
@@ -217,6 +299,10 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _onFinished() {
     _timer?.cancel();
+    if (_isRecordingEnabled) {
+      _recorder.stop();
+      _reportSavedClips();
+    }
     SoundService.stopBgm();
     SoundService.playWhistle();
     HapticFeedback.heavyImpact();
@@ -231,6 +317,11 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   void _onCancel() {
     _timer?.cancel();
+    // 走行中に中止した場合も、そこまでの動画は保存する
+    if (_isRecordingEnabled) {
+      _recorder.stop();
+      _reportSavedClips();
+    }
     SoundService.stopAll(); // スタート音・BGM含め全停止
     _pulseController.stop();
     _pulseController.reset();
@@ -260,6 +351,10 @@ class _PracticeScreenState extends State<PracticeScreen>
     _timer?.cancel();
     SoundService.pauseBgm();
     _pulseController.stop();
+    // 走行中に一時停止したら録画も止めて保存（再開後は次の走りから録る）
+    if (_isRecordingEnabled && _phase == PracticePhase.sprint) {
+      _recorder.stop();
+    }
     setState(() => _isPaused = true);
   }
 
@@ -305,15 +400,28 @@ class _PracticeScreenState extends State<PracticeScreen>
     final isRunning = _phase != PracticePhase.idle;
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (!isRunning) _buildSettings(),
-            Expanded(child: _buildMainArea()),
-            _buildButtons(),
-            const SizedBox(height: 16),
-          ],
-        ),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                if (!isRunning) _buildSettings(),
+                Expanded(child: _buildMainArea()),
+                _buildButtons(),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+          // カメラ映像の小窓（録画ON時のみ。録画中は赤枠になる）
+          if (!kIsWeb && _isRecordingEnabled && _recorder.isReady)
+            CameraWipe(
+              controller: _recorder.controller!,
+              isRecording: _recorder.isRecording,
+              zoom: _recorder.zoom,
+              onZoomRequest: _recorder.setZoom,
+              onSwitchCamera: _recorder.switchCamera,
+            ),
+        ],
       ),
     );
   }
@@ -391,6 +499,23 @@ class _PracticeScreenState extends State<PracticeScreen>
                   width: 40,
                   child: Text('$_metronomeBpm',
                       style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ],
+          // 録画（走る区間ごとに1本ずつ写真アプリへ。Web版は非対応）
+          if (!kIsWeb) ...[
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.videocam, size: 20),
+                const SizedBox(width: 6),
+                const Text('走るたびに録画', style: TextStyle(fontSize: 15)),
+                const SizedBox(width: 8),
+                Switch(
+                  value: _isRecordingEnabled,
+                  onChanged: _toggleRecording,
                 ),
               ],
             ),
@@ -620,6 +745,33 @@ class _PracticeScreenState extends State<PracticeScreen>
                     ),
                   ),
                 ),
+
+                // 録画ON時: 保存済みの本数
+                if (_isRecordingEnabled) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _recorder.isRecording
+                            ? Icons.fiber_manual_record
+                            : Icons.videocam,
+                        size: 18,
+                        color: _recorder.isRecording
+                            ? Colors.redAccent
+                            : Colors.white70,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _recorder.isRecording
+                            ? '録画中  ・  保存 ${_recorder.savedCount}本'
+                            : '保存 ${_recorder.savedCount}本',
+                        style: const TextStyle(
+                            fontSize: 14, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

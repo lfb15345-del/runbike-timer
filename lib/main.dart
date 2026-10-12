@@ -9,6 +9,7 @@ import 'screens/course_screen.dart';
 import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
 import 'services/sound_service.dart';
+import 'services/app_settings.dart';
 import 'services/web_camera_service.dart';
 import 'theme.dart';
 import 'widgets/runbike_mark.dart';
@@ -295,6 +296,7 @@ class _HomePageState extends State<HomePage> {
     if (index == 2) {
       AnalysisScreen.refreshTick.value++;
     }
+    AppSettings.currentTab.value = index;
     setState(() => _currentIndex = index);
   }
 

@@ -1,15 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:camera/camera.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:gal/gal.dart';
 import '../constants/sound_config.dart';
 import '../services/database_service.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
 import '../services/web_camera_service.dart';
+import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
 import '../widgets/camera_wipe.dart';
 import '../widgets/timer_text.dart';
@@ -17,9 +15,6 @@ import '../theme.dart';
 
 /// タイマーの状態
 enum TimerState { waiting, countdown, measuring }
-
-/// 録画した動画の保存先（写真アプリ / 許可なしで失敗 / アプリ内に退避）
-enum _VideoSaveResult { gallery, denied, appFolder }
 
 /// 計測タブ（メイン画面）
 class MeasureScreen extends StatefulWidget {
@@ -78,10 +73,23 @@ class _MeasureScreenState extends State<MeasureScreen>
     _loadChildren();
     _initCameras();
     SoundService.preloadStartSounds();
+    AppSettings.currentTab.addListener(_onTabChanged);
+  }
+
+  /// 他のタブ（練習など）に移ったらカメラを手放し、戻ってきたら付け直す
+  /// （カメラは同時に1画面しか使えないため。録画スイッチ自体はONのまま）
+  void _onTabChanged() {
+    if (kIsWeb || !_isRecordingEnabled) return;
+    if (AppSettings.currentTab.value == 0) {
+      if (!_isCameraInitialized) _setupCamera();
+    } else if (_cameraController != null) {
+      _disposeCamera();
+    }
   }
 
   @override
   void dispose() {
+    AppSettings.currentTab.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _cameraController?.dispose();
@@ -97,7 +105,8 @@ class _MeasureScreenState extends State<MeasureScreen>
       _cameraController?.dispose();
       _isCameraInitialized = false;
     } else if (state == AppLifecycleState.resumed) {
-      if (_isRecordingEnabled) {
+      // 計測タブを表示中のときだけカメラを付け直す（練習タブがカメラを使っている場合があるため）
+      if (_isRecordingEnabled && AppSettings.currentTab.value == 0) {
         _setupCamera();
       }
     }
@@ -226,17 +235,13 @@ class _MeasureScreenState extends State<MeasureScreen>
       final xFile = await _cameraController!.stopVideoRecording();
       setState(() => _isVideoRecording = false);
 
-      final result = await _saveVideoToStorage(xFile.path);
+      final result = await VideoSaver.save(xFile.path);
       switch (result) {
-        case _VideoSaveResult.gallery:
+        case VideoSaveResult.gallery:
           _showMessage('動画を写真アプリに保存しました（アルバム「ランバイクタイマー」）');
-        case _VideoSaveResult.denied:
-          _showMessage(
-            '写真へのアクセスが許可されていないため、写真アプリに保存できませんでした。\n'
-            '設定 → ランバイクタイマー → 写真 を「フルアクセス」にしてください',
-            seconds: 8,
-          );
-        case _VideoSaveResult.appFolder:
+        case VideoSaveResult.denied:
+          _showMessage(VideoSaver.deniedMessage, seconds: 8);
+        case VideoSaveResult.appFolder:
           _showMessage('写真アプリに保存できなかったため、アプリ内に退避しました', seconds: 5);
       }
     } catch (e) {
@@ -244,75 +249,6 @@ class _MeasureScreenState extends State<MeasureScreen>
       setState(() => _isVideoRecording = false);
       _showMessage('動画の保存に失敗しました');
     }
-  }
-
-  /// 動画ファイルを写真アプリ（ギャラリー）に保存
-  /// 1. アルバム付きで保存（写真への「フルアクセス」が必要）
-  /// 2. ダメならアルバムなしで保存（「追加のみ」の許可でも通る）
-  /// 3. それでもダメならアプリ内フォルダに退避
-  Future<_VideoSaveResult> _saveVideoToStorage(String tempPath) async {
-    if (kIsWeb) return _VideoSaveResult.appFolder;
-
-    var accessDenied = false;
-    try {
-      // 許可がなければこの場で求める（初回はiOSのダイアログが出る）
-      if (!await Gal.hasAccess(toAlbum: true)) {
-        await Gal.requestAccess(toAlbum: true);
-      }
-      await Gal.putVideo(tempPath, album: 'ランバイクタイマー');
-      try {
-        await File(tempPath).delete();
-      } catch (_) {}
-      return _VideoSaveResult.gallery;
-    } on GalException catch (e) {
-      debugPrint('ギャラリー保存エラー（アルバム付き）: ${e.type}');
-      accessDenied = e.type == GalExceptionType.accessDenied;
-    } catch (e) {
-      debugPrint('ギャラリー保存エラー（アルバム付き）: $e');
-    }
-
-    // アルバム作成には「フルアクセス」が要るので、「追加のみ」許可の場合はここで通る
-    try {
-      if (!await Gal.hasAccess()) {
-        await Gal.requestAccess();
-      }
-      await Gal.putVideo(tempPath);
-      try {
-        await File(tempPath).delete();
-      } catch (_) {}
-      return _VideoSaveResult.gallery;
-    } on GalException catch (e) {
-      debugPrint('ギャラリー保存エラー（アルバムなし）: ${e.type}');
-      accessDenied = accessDenied || e.type == GalExceptionType.accessDenied;
-    } catch (e) {
-      debugPrint('ギャラリー保存エラー（アルバムなし）: $e');
-    }
-
-    // フォールバック: アプリ固有フォルダに保存
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final videoDir = Directory('${appDir.path}/videos');
-      if (!await videoDir.exists()) {
-        await videoDir.create(recursive: true);
-      }
-      final now = DateTime.now();
-      final dateStr = '${now.year}'
-          '${now.month.toString().padLeft(2, '0')}'
-          '${now.day.toString().padLeft(2, '0')}_'
-          '${now.hour.toString().padLeft(2, '0')}'
-          '${now.minute.toString().padLeft(2, '0')}'
-          '${now.second.toString().padLeft(2, '0')}';
-      final ext = tempPath.split('.').last;
-      final savePath = '${videoDir.path}/runbike_$dateStr.$ext';
-      final tempFile = File(tempPath);
-      await tempFile.copy(savePath);
-      try {
-        await tempFile.delete();
-      } catch (_) {}
-    } catch (e) {
-      debugPrint('動画保存エラー: $e');
-    }
-    return accessDenied ? _VideoSaveResult.denied : _VideoSaveResult.appFolder;
   }
 
   /// 録画スイッチのON/OFF
