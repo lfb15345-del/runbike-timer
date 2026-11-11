@@ -6,13 +6,13 @@
 // 仕組み: テスト用の仮想画面に本物の画面ウィジェットを表示して画像にする。
 // データベース・音・カメラは実機がないと動かないので、見本データを返す「代役」に差し替えている。
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite/sqflite.dart';
 
 import 'package:runbike_app/screens/analysis_screen.dart';
 import 'package:runbike_app/screens/course_screen.dart';
@@ -215,10 +215,16 @@ void main() {
     // それ以外（音・カメラなど）は「何もせず成功」と返す
     messenger.allMessagesHandler = (channel, handler, message) {
       if (handler != null) return handler(message);
+      // Flutter本体の連絡路は、テストのいつもの動き（返事なし）のままにする
+      if (channel.startsWith('flutter/')) {
+        return Future<ByteData?>.value(null);
+      }
       return Future<ByteData?>.value(
           const StandardMethodCodec().encodeSuccessEnvelope(null));
     };
 
+    // テスト環境ではデータベース部品が自動で登録されないので、手動で登録する
+    databaseFactory = databaseFactorySqflitePlugin;
     await DatabaseService.init();
   });
 
@@ -245,7 +251,9 @@ void main() {
     await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 7310)));
     await tester.pump(const Duration(milliseconds: 30));
-    await tester.pump(const Duration(milliseconds: 300));
+    // ボタンを押したときの波紋（グレーの重なり）が消えるまで待つ
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 800));
     await _shoot(tester, '02_measure_go');
     await _cleanUp(tester);
   });
@@ -272,9 +280,12 @@ void main() {
     await tester.pump(const Duration(seconds: 11));
     await tester.pump(const Duration(milliseconds: 30));
     // 本物の時間を進めて、残り12秒台にする
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 7500)));
-    await tester.pump(const Duration(milliseconds: 30));
+    // （3秒以上タイマーを止めると「スマホに止められた」と判断されて一時停止になるので、小分けに進める）
+    for (var i = 0; i < 3; i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 2500)));
+      await tester.pump(const Duration(milliseconds: 30));
+    }
     await tester.pump(const Duration(milliseconds: 300));
     await _shoot(tester, '04_practice_go');
     await _cleanUp(tester);

@@ -6,6 +6,7 @@ import '../constants/sound_config.dart';
 import '../services/database_service.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
+import '../services/background_keeper.dart';
 import '../services/web_camera_service.dart';
 import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
@@ -351,6 +352,8 @@ class _MeasureScreenState extends State<MeasureScreen>
       _state = TimerState.countdown;
       MeasureScreen.isRunning = true;
     });
+    // 別のアプリを開いても止まらないようにする
+    BackgroundKeeper.start();
 
     // 録画ONなら録画開始
     if (_isRecordingEnabled) {
@@ -413,6 +416,7 @@ class _MeasureScreenState extends State<MeasureScreen>
   /// 中止ボタン
   void _onCancel() {
     SoundService.stopAll();
+    BackgroundKeeper.stop();
     _timer?.cancel();
     _readyController.stop();
 
@@ -459,6 +463,7 @@ class _MeasureScreenState extends State<MeasureScreen>
         DateTime.now().difference(_measureStartTime!).inMilliseconds;
     _timer?.cancel();
     SoundService.stopBgm(); // 計測中BGMを停止
+    BackgroundKeeper.stop();
 
     // 録画中なら停止（プレビューはまだ出さない）
     final hadRecording = _isVideoRecording;

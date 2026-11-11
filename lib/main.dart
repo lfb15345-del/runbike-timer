@@ -10,6 +10,7 @@ import 'services/database_service.dart';
 import 'services/web_audio_service.dart';
 import 'services/sound_service.dart';
 import 'services/app_settings.dart';
+import 'services/background_keeper.dart';
 import 'services/web_camera_service.dart';
 import 'theme.dart';
 import 'widgets/runbike_mark.dart';
@@ -17,6 +18,8 @@ import 'widgets/runbike_mark.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseService.init();
+  // 音の基本設定（ほかのアプリの音と共存・裏に回っても鳴らせる）
+  await BackgroundKeeper.init();
   runApp(const RunbikeApp());
 }
 

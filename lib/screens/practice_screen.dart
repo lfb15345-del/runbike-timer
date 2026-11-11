@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../constants/sound_config.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
+import '../services/background_keeper.dart';
 import '../services/practice_recorder.dart';
 import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
@@ -172,11 +173,9 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 練習中にアプリが裏に回ったら自動で一時停止する
-    // （裏では音だけ止まってタイマーが進み、戻ったときに音がずれるのを防ぐ）
-    if (state == AppLifecycleState.paused) {
-      _onPause();
-    }
+    // 練習中に別のアプリを開いても、止めずにそのまま進める（BackgroundKeeper が動かし続ける）。
+    // 万一スマホ側に止められてしまった場合は、タイマー側（_startCountdownTimer）が
+    // それに気づいて「一時停止」にする
 
     if (!_isRecordingEnabled) return;
     // 「paused」= ホームに戻った等。カメラ許可ダイアログ表示中（inactive）では閉じない
@@ -253,6 +252,8 @@ class _PracticeScreenState extends State<PracticeScreen>
       PracticeScreen.isRunning = true;
     });
     if (_isRecordingEnabled) _recorder.resetCount();
+    // 別のアプリを開いても止まらないようにする
+    BackgroundKeeper.start();
 
     // READYの進み具合バーを、GO!までの時間ぴったりで動かす
     _countdownStartTime = DateTime.now();
@@ -371,9 +372,18 @@ class _PracticeScreenState extends State<PracticeScreen>
     _timer?.cancel();
     final startTime = DateTime.now();
     final initialRemaining = _remainingMs;
+    var lastTickTime = startTime;
 
     _timer = Timer.periodic(const Duration(milliseconds: 20), (_) {
-      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      final now = DateTime.now();
+      // 3秒以上タイマーが動けなかった = 裏に回っている間にスマホに止められていた。
+      // そのまま続けると音とタイマーがずれるので、止められた時点の残り時間で一時停止にする
+      if (now.difference(lastTickTime).inMilliseconds > 3000) {
+        _onPause();
+        return;
+      }
+      lastTickTime = now;
+      final elapsed = now.difference(startTime).inMilliseconds;
       final remaining = initialRemaining - elapsed;
 
       if (remaining <= 0) {
@@ -412,6 +422,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     SoundService.stopBgm();
     SoundService.playWhistle();
     HapticFeedback.heavyImpact();
+    BackgroundKeeper.stop();
     setState(() {
       _phase = PracticePhase.finished;
       _remainingMs = 0;
@@ -430,6 +441,7 @@ class _PracticeScreenState extends State<PracticeScreen>
       _reportSavedClips();
     }
     SoundService.stopAll(); // スタート音・BGM含め全停止
+    BackgroundKeeper.stop();
     setState(() {
       _phase = PracticePhase.idle;
       _currentRound = 1;
