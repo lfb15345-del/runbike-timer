@@ -12,9 +12,9 @@ class TimerText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fontSize = style.fontSize ?? 20;
-    // Orbitronの数字はおよそ0.74em幅。記号（. :）は細めのマスにする
-    final digitWidth = fontSize * 0.80;
-    final symbolWidth = fontSize * 0.38;
+    // Barlow Condensed の数字は最大でおよそ0.49em幅。記号（. :）は細めのマスにする
+    final digitWidth = fontSize * 0.52;
+    final symbolWidth = fontSize * 0.26;
 
     return Row(
       mainAxisSize: MainAxisSize.min,

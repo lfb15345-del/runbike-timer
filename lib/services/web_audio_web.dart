@@ -93,9 +93,25 @@ class WebAudioService {
   }
 
   /// プリロード済みのサウンドバッファを即時再生
-  static void playSoundBuffer(String filename) {
+  /// [fromMs] を指定すると音声の途中から鳴らす
+  static void playSoundBuffer(String filename, {int fromMs = 0}) {
     try {
-      globalContext.callMethod('playSoundBuffer'.toJS, filename.toJS);
+      globalContext.callMethod(
+          'playSoundBuffer'.toJS, filename.toJS, fromMs.toJS);
+    } catch (_) {}
+  }
+
+  /// 再生中のサウンドバッファを一時停止（続きから再開できる）
+  static void pauseSoundBuffer() {
+    try {
+      globalContext.callMethod('pauseSoundBuffer'.toJS);
+    } catch (_) {}
+  }
+
+  /// 一時停止したサウンドバッファを続きから再開
+  static void resumeSoundBuffer() {
+    try {
+      globalContext.callMethod('resumeSoundBuffer'.toJS);
     } catch (_) {}
   }
 

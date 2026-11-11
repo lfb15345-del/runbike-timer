@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/database_service.dart';
+import '../theme.dart';
 
 /// 解析・共有タブ
 class AnalysisScreen extends StatefulWidget {
@@ -142,7 +143,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     decoration: const InputDecoration(
                       labelText: '最高速度 (km/h)',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.speed, color: Colors.orange),
+                      prefixIcon: Icon(Icons.speed, color: AppTheme.ink),
                     ),
                   ),
                 ),
@@ -154,7 +155,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     decoration: const InputDecoration(
                       labelText: '平均速度 (km/h)',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.trending_up, color: Colors.blue),
+                      prefixIcon: Icon(Icons.trending_up, color: AppTheme.ink),
                     ),
                   ),
                 ),
@@ -184,10 +185,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       // データを再読み込み
                       await _selectChild(_selectedChildId!, _selectedChildName);
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
                     child: const Text('保存'),
                   ),
                 ),
@@ -299,14 +296,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 // スピード記録カード（データがある場合のみ）
                 if (_bestMaxSpeed != null || _bestAvgSpeed != null)
                   Card(
-                    color: Colors.orange[50],
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
                           const Row(
                             children: [
-                              Icon(Icons.speed, color: Colors.orange, size: 20),
+                              Icon(Icons.speed, color: AppTheme.ink, size: 20),
                               SizedBox(width: 8),
                               Text('スピード記録',
                                   style: TextStyle(
@@ -399,8 +395,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                               child: ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor:
-                                      isBest ? Colors.amber : Colors.grey[300],
-                                  child: Text('${index + 1}'),
+                                      isBest ? AppTheme.volt : AppTheme.line,
+                                  child: Text('${index + 1}',
+                                      style: AppTheme.timerStyle(
+                                          fontSize: 20, color: AppTheme.ink)),
                                 ),
                                 title: Text(
                                   '${_formatTime(timeMs)} 秒',
@@ -408,7 +406,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                     fontSize: 20,
                                     fontWeight:
                                         isBest ? FontWeight.bold : FontWeight.normal,
-                                    color: isBest ? Colors.amber[800] : null,
+                                    color: isBest ? AppTheme.deepGreen : null,
                                   ),
                                 ),
                                 subtitle: hasSpeed
@@ -418,13 +416,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                           if (avgSpd != null) '平均 ${avgSpd.toStringAsFixed(1)}km/h',
                                         ].join('  '),
                                         style: TextStyle(
-                                          color: Colors.orange[700],
+                                          color: AppTheme.muted,
                                           fontSize: 13,
                                         ),
                                       )
                                     : null,
                                 trailing: isBest
-                                    ? const Icon(Icons.star, color: Colors.amber)
+                                    ? const Icon(Icons.star, color: AppTheme.deepGreen)
                                     : null,
                                 onTap: () => _showSpeedInputDialog(result),
                               ),
@@ -466,12 +464,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 4),
-        // 数字はレーシング系フォントで表示（日本語部分は自動でNoto Sansにフォールバック）
+        // 数字は計時用の斜体フォントで表示（日本語部分は端末の日本語フォントで表示される）
         Text(value,
-            style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Orbitron')),
+            style: AppTheme.timerStyle(fontSize: 30)),
       ],
     );
   }

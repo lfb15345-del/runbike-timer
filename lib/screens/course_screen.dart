@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../theme.dart';
 
 /// コース設定タブ
 class CourseScreen extends StatefulWidget {
@@ -109,8 +110,9 @@ class _CourseScreenState extends State<CourseScreen> {
                   if (_saved)
                     const Chip(
                       label: Text('保存済み'),
-                      backgroundColor: Colors.green,
-                      labelStyle: TextStyle(color: Colors.white),
+                      backgroundColor: AppTheme.volt,
+                      labelStyle: TextStyle(
+                          color: AppTheme.ink, fontWeight: FontWeight.bold),
                     ),
                 ],
               ),
@@ -226,8 +228,6 @@ class _CourseScreenState extends State<CourseScreen> {
                   onPressed: _save,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
                   ),
                   child: const Text('保存する', style: TextStyle(fontSize: 18)),
                 ),

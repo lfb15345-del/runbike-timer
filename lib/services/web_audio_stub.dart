@@ -13,7 +13,9 @@ class WebAudioService {
   static void stopAll() {}
   static void preloadSound(String filename) {}
   static Future<void> preloadAllSounds() async {}
-  static void playSoundBuffer(String filename) {}
+  static void playSoundBuffer(String filename, {int fromMs = 0}) {}
+  static void pauseSoundBuffer() {}
+  static void resumeSoundBuffer() {}
   static void playEffect(String filename) {}
   static void stopSoundBuffer() {}
 }

@@ -44,15 +44,53 @@ class SoundService {
     }
   }
 
+  // スタート音の「再生の世代番号」。再生準備中に停止された古い再生が
+  // あとから鳴り出すのを防ぐ
+  static int _startSoundToken = 0;
+
   /// スタート音（3,2,1,GO!）を再生。サイレントの場合は何もしない
-  static void playStartSound(StartSound sound) {
+  /// [fromMs] を指定すると、音声ファイルの途中（先頭から何ミリ秒の位置）から鳴らす
+  static void playStartSound(StartSound sound, {int fromMs = 0}) {
     final path = sound.assetPath;
     if (path == null) return;
     if (kIsWeb) {
-      WebAudioService.playSoundBuffer(sound.webFilename!);
+      WebAudioService.playSoundBuffer(sound.webFilename!, fromMs: fromMs);
     } else {
-      // 再生中でも先頭から鳴らし直せるよう、一度止めてから再生
-      _startPlayer.stop().then((_) => _startPlayer.play(AssetSource(path)));
+      final token = ++_startSoundToken;
+      final position = fromMs > 0 ? Duration(milliseconds: fromMs) : null;
+      // 再生中でも鳴らし直せるよう、一度止めてから再生
+      _startPlayer.stop().then((_) {
+        if (token != _startSoundToken) return; // 準備中に止められていたら鳴らさない
+        _startPlayer.play(AssetSource(path), position: position);
+      });
+    }
+  }
+
+  /// スタート音を一時停止（練習の一時停止用。続きから再開できる）
+  static void pauseStartSound() {
+    if (kIsWeb) {
+      WebAudioService.pauseSoundBuffer();
+    } else {
+      _startPlayer.pause();
+    }
+  }
+
+  /// 一時停止したスタート音を続きから再開
+  static void resumeStartSound() {
+    if (kIsWeb) {
+      WebAudioService.resumeSoundBuffer();
+    } else {
+      _startPlayer.resume();
+    }
+  }
+
+  /// スタート音だけを停止
+  static void stopStartSound() {
+    if (kIsWeb) {
+      WebAudioService.stopSoundBuffer();
+    } else {
+      _startSoundToken++;
+      _startPlayer.stop();
     }
   }
 
@@ -159,6 +197,7 @@ class SoundService {
     } else {
       _metronomeTimer?.cancel();
       _metronomeTimer = null;
+      _startSoundToken++;
       _startPlayer.stop();
       _whistlePlayer.stop();
       _bgmPlayer.stop();

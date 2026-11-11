@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/app_settings.dart';
+import '../theme.dart';
 
 /// Bluetooth遅延補正の ± コントロール
 /// （これまで計測画面と練習画面に同じコードが重複していたのを共通化）
@@ -20,7 +21,7 @@ class BtOffsetControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final offsetMs = AppSettings.bluetoothOffsetMs;
     final isActive = offsetMs > 0;
-    final activeColor = isActive ? Colors.blue : Colors.grey;
+    final activeColor = isActive ? AppTheme.ink : AppTheme.muted;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -52,8 +53,8 @@ class BtOffsetControl extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: isActive
-                ? Colors.blue.withValues(alpha: 0.1)
-                : Colors.grey.withValues(alpha: 0.1),
+                ? AppTheme.volt
+                : AppTheme.line.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

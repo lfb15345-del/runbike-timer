@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#2E7D32</color>
+    <!-- アイコン背景・起動画面の色（ロゴと同じ墨色） -->
+    <color name="ic_launcher_background">#0F1512</color>
+    <color name="launch_background_color">#0F1512</color>
 </resources>

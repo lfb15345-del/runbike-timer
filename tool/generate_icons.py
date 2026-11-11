@@ -1,171 +1,123 @@
 """
-ランバイクタイマー アプリアイコン一括生成スクリプト
-- iOS / Android(通常+アダプティブ前景) / Web(PWA, maskable含む) / favicon を一括出力
-- 実行: python tool/generate_icons.py  （プロジェクトルートで実行）
+ランバイクタイマー アプリアイコン一括生成スクリプト（v2: 新ロゴ）
+
+ロゴの考え方:
+  ・白い部分 = ランバイクの車体（後輪・フレーム・サドル）
+  ・黄緑の部分 = 前輪 + フォーク + ハンドル。ここだけ見ると「ストップウォッチ」
+    （輪 = 文字盤、フォーク = 針、ハンドル = 竜頭）になっている
+  ・線の太さを1種類にそろえ、影・グラデーション・スピード線は使わない
+
+出力: iOS / Android(通常 + アダプティブ前景) / Web(PWA, maskable) / favicon /
+      起動画面のマーク / assets/app_icon.png
+実行: python tool/generate_icons.py   （runbike_app フォルダで実行。Pillow が必要）
+      python tool/generate_icons.py --preview out.png  （1枚だけ書き出して確認）
+
+※ 形を変えるときは lib/widgets/runbike_mark.dart の数値も同じに直すこと
 """
 import json
-import math
 import os
-import numpy as np
+import sys
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SS = 4  # スーパーサンプリング倍率
-BASE = 1024
-SIZE = BASE * SS
+SS = 4  # 4倍で描いて縮小（フチをなめらかにする）
+
+INK = (15, 21, 18)       # 背景の黒（わずかに緑がかった墨色） #0F1512
+VOLT = (200, 242, 58)    # アクセントの黄緑 #C8F23A
+PAPER = (244, 245, 239)  # 車体の白 #F4F5EF
+
+# ---- ロゴの形（1000x1000 の設計座標） ----
+STROKE = 56.0
+WHEEL_R = 150.0
+REAR_HUB = (275.0, 645.0)
+FRONT_HUB = (705.0, 645.0)
+HEAD = (600.0, 418.0)        # フレームとフォークの合流点
+STEM_TOP = (565.0, 341.0)    # ハンドルの付け根
+BAR_A = (501.0, 370.0)       # ハンドル（竜頭）の両端
+BAR_B = (629.0, 312.0)
+SEAT_BASE = (412.0, 549.0)   # サドルの支柱（フレーム側）
+SEAT_TOP = (388.0, 398.0)
+SADDLE_A = (316.0, 398.0)
+SADDLE_B = (422.0, 398.0)
+CONTENT_CENTER = (490.0, 552.0)  # 絵柄の中心（アイコン中央に合わせる点）
+
+# 車体（白）と ストップウォッチ部分（黄緑）
+BODY = [
+    ('ring', REAR_HUB, WHEEL_R),
+    ('line', REAR_HUB, HEAD),
+    ('line', SEAT_BASE, SEAT_TOP),
+    ('line', SADDLE_A, SADDLE_B),
+]
+WATCH = [
+    ('ring', FRONT_HUB, WHEEL_R),
+    ('line', FRONT_HUB, STEM_TOP),
+    ('line', BAR_A, BAR_B),
+]
 
 
-def hex2rgb(h):
-    h = h.lstrip('#')
-    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+def _mask(prims, size, scale):
+    """図形リストを白黒マスクとして描く"""
+    big = size * SS
+    k = big / 1000.0
+    mask = Image.new('L', (big, big), 0)
+    d = ImageDraw.Draw(mask)
 
-BRAND_GREEN_LIGHT = hex2rgb('3E8E4F')
-BRAND_GREEN_DARK = hex2rgb('072016')
-WHITE = hex2rgb('FBFBF6')
-AMBER = hex2rgb('FFC531')
+    def tr(p):
+        return ((p[0] - CONTENT_CENTER[0]) * scale + 500) * k, \
+               ((p[1] - CONTENT_CENTER[1]) * scale + 500) * k
 
-CONTENT_CENTER = (536, 591)
-CANVAS_CENTER = (500, 495)
-
-
-def make_transform(scale):
-    def T(pt):
-        x, y = pt
-        cx, cy = CONTENT_CENTER
-        tx, ty = CANVAS_CENTER
-        return ((x - cx) * scale + tx, (y - cy) * scale + ty)
-    return T
-
-
-def make_gradient_bg(size):
-    y, x = np.mgrid[0:size, 0:size].astype(np.float32)
-    t = np.clip((x + y) / (2 * size), 0, 1)
-    c1 = np.array(BRAND_GREEN_LIGHT, dtype=np.float32)
-    c2 = np.array(BRAND_GREEN_DARK, dtype=np.float32)
-    grad = c1[None, None, :] * (1 - t[..., None]) + c2[None, None, :] * t[..., None]
-    cx, cy = size * 0.50, size * 0.48
-    dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2) / (size * 0.65)
-    glow = np.clip(1 - dist, 0, 1) ** 2.0
-    highlight = np.array(BRAND_GREEN_LIGHT, dtype=np.float32) * 0.30
-    grad = grad + highlight[None, None, :] * glow[..., None]
-    return Image.fromarray(np.clip(grad, 0, 255).astype(np.uint8), mode='RGB')
+    w = STROKE * scale * k
+    for pr in prims:
+        if pr[0] == 'ring':
+            c = tr(pr[1])
+            ro = (pr[2] * scale * k) + w / 2
+            ri = (pr[2] * scale * k) - w / 2
+            d.ellipse([c[0] - ro, c[1] - ro, c[0] + ro, c[1] + ro], fill=255)
+            d.ellipse([c[0] - ri, c[1] - ri, c[0] + ri, c[1] + ri], fill=0)
+    for pr in prims:
+        if pr[0] == 'line':
+            a, b = tr(pr[1]), tr(pr[2])
+            d.line([a, b], fill=255, width=int(round(w)))
+            for p in (a, b):  # 端を丸くする
+                d.ellipse([p[0] - w / 2, p[1] - w / 2, p[0] + w / 2, p[1] + w / 2], fill=255)
+    return mask.resize((size, size), Image.LANCZOS)
 
 
-def rot(pt, origin, deg):
-    rad = math.radians(deg)
-    ox, oy = origin
-    px, py = pt
-    dx, dy = px - ox, py - oy
-    ca, sa = math.cos(rad), math.sin(rad)
-    return (ox + dx * ca - dy * sa, oy + dx * sa + dy * ca)
-
-
-def pill(draw, p1, p2, width, fill, s):
-    a = (p1[0]*s, p1[1]*s)
-    b = (p2[0]*s, p2[1]*s)
-    draw.line([a, b], fill=fill, width=int(width*s))
-    r = width * s / 2
-    for pt in (a, b):
-        draw.ellipse([pt[0]-r, pt[1]-r, pt[0]+r, pt[1]+r], fill=fill)
-
-
-def smooth_curve(draw, pts, width, fill, s, steps=40):
-    def catmull_rom(p0, p1, p2, p3, t):
-        t2, t3 = t*t, t*t*t
-        x = 0.5 * ((2*p1[0]) + (-p0[0]+p2[0])*t + (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2 + (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3)
-        y = 0.5 * ((2*p1[1]) + (-p0[1]+p2[1])*t + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
-        return (x, y)
-    ext = [pts[0]] + pts + [pts[-1]]
-    curve_pts = []
-    for i in range(len(pts) - 1):
-        p0, p1, p2, p3 = ext[i], ext[i+1], ext[i+2], ext[i+3]
-        for j in range(steps):
-            curve_pts.append(catmull_rom(p0, p1, p2, p3, j/steps))
-    curve_pts.append(pts[-1])
-    for i in range(len(curve_pts) - 1):
-        pill(draw, curve_pts[i], curve_pts[i+1], width, fill, s)
-
-
-def draw_bike(draw, s, scale, with_motion_and_flag=True):
-    """ランバイク本体を描く（scaleで全体サイズ調整、safe-zone確保に使う）"""
-    T = make_transform(scale)
-
-    if with_motion_and_flag:
-        for (yy, x2, length, w, alpha) in [
-            (430, 150, 100, 20, 65), (490, 110, 150, 28, 95),
-            (555, 130, 118, 22, 70), (615, 165, 82, 16, 45),
-        ]:
-            x1 = x2 - length
-            pill(draw, (x1, yy), (x2, yy - 12), w, WHITE + (alpha,), s)
-
-    RW = T((315, 700)); FW = T((760, 700))
-    R = 172 * scale
-    for center in (RW, FW):
-        cx, cy = center
-        draw.ellipse([(cx-R)*s,(cy-R)*s,(cx+R)*s,(cy+R)*s], fill=WHITE)
-        inner = R - 46*scale
-        draw.ellipse([(cx-inner)*s,(cy-inner)*s,(cx+inner)*s,(cy+inner)*s], fill=BRAND_GREEN_DARK)
-        for ang in (0, 30, 60, 90, 120, 150):
-            p1 = rot((cx-inner+16*scale, cy), center, ang)
-            p2 = rot((cx+inner-16*scale, cy), center, ang)
-            draw.line([(p1[0]*s,p1[1]*s),(p2[0]*s,p2[1]*s)], fill=WHITE+(110,), width=int(8*scale*s))
-        hub_r = 26 * scale
-        draw.ellipse([(cx-hub_r)*s,(cy-hub_r)*s,(cx+hub_r)*s,(cy+hub_r)*s], fill=AMBER)
-
-    frame_curve = [T(p) for p in [
-        (315+30, 700-70), (315+140, 700-135), (520, 520), (760-150, 700-160), (760-40, 700-95),
-    ]]
-    smooth_curve(draw, frame_curve, 58*scale, WHITE, s)
-
-    seat_base = T((315+150, 700-130)); seat_top = T((365, 430))
-    pill(draw, seat_base, seat_top, 36*scale, WHITE, s)
-    saddle_a = T((365-72, 430+6)); saddle_b = T((365+70, 430-18))
-    pill(draw, saddle_a, saddle_b, 46*scale, WHITE, s)
-
-    steer_base = T((760-120, 700-155)); steer_top = T((700, 360))
-    pill(draw, steer_base, steer_top, 36*scale, WHITE, s)
-    handlebar_a = T((700-64, 360+50)); handlebar_b = T((700+60, 360-42))
-    pill(draw, handlebar_a, handlebar_b, 40*scale, WHITE, s)
-    for gp in (handlebar_a, handlebar_b):
-        r = 24 * scale
-        draw.ellipse([(gp[0]-r)*s,(gp[1]-r)*s,(gp[0]+r)*s,(gp[1]+r)*s], fill=AMBER)
-
-    if with_motion_and_flag:
-        flag_x0, flag_y0 = 800, 800
-        cell = 24
-        for row in range(4):
-            for col in range(5):
-                if (row + col) % 2 == 0:
-                    x0 = flag_x0 + col * cell
-                    y0 = flag_y0 + row * cell
-                    draw.rectangle([x0*s, y0*s, (x0+cell)*s, (y0+cell)*s], fill=WHITE + (190,))
-
-
-def render_master(transparent, scale):
-    s = SIZE / 1000.0
-    if transparent:
-        img = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))
+def render(size=1024, scale=1.04, bg=INK, body=PAPER, watch=VOLT):
+    """ロゴを描く。bg=None で背景透明（RGBA）"""
+    if bg is None:
+        img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     else:
-        img = make_gradient_bg(SIZE).convert('RGBA')
-    draw = ImageDraw.Draw(img, 'RGBA')
-    draw_bike(draw, s, scale, with_motion_and_flag=not transparent)
-    final = img.resize((BASE, BASE), Image.LANCZOS)
-    return final
+        img = Image.new('RGBA', (size, size), bg + (255,))
+    for prims, color in ((BODY, body), (WATCH, watch)):
+        layer = Image.new('RGBA', (size, size), color + (255,))
+        img.paste(layer, (0, 0), _mask(prims, size, scale))
+    return img
 
 
-def save_sized(master, path, size, rgb=True):
+def save(img, path, size, rgb=True):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    resized = master.resize((size, size), Image.LANCZOS)
+    out = img.resize((size, size), Image.LANCZOS)
     if rgb:
-        resized = resized.convert('RGB')
-    resized.save(path, 'PNG')
+        out = out.convert('RGB')
+    out.save(path, 'PNG')
 
 
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == '--preview':
+        render().convert('RGB').save(sys.argv[2])
+        print('プレビューを書き出しました:', sys.argv[2])
+        return
+
     print('マスター画像を生成中...')
-    master_solid = render_master(transparent=False, scale=1.16)          # 通常アイコン（背景あり）
-    master_fg = render_master(transparent=True, scale=0.92)              # Android前景（透明・余白多め）
-    master_maskable = render_master(transparent=False, scale=1.16 * 0.78)  # Web maskable（セーフゾーン確保）
+    solid = render(scale=1.04)                 # 通常アイコン（背景あり）
+    foreground = render(scale=0.96, bg=None)    # Androidアダプティブ前景（透明・余白多め）
+    maskable = render(scale=0.84)              # Web maskable（丸く切り抜かれても欠けない）
+    launch = render(scale=1.04, bg=None)       # 起動画面のマーク（透明）
+
+    # ---------- アプリ内・ストア用の元画像 ----------
+    save(solid, os.path.join(ROOT, 'assets/app_icon.png'), 1024)
+    save(foreground, os.path.join(ROOT, 'assets/app_icon_foreground.png'), 1024, rgb=False)
 
     # ---------- iOS ----------
     ios_dir = os.path.join(ROOT, 'ios/Runner/Assets.xcassets/AppIcon.appiconset')
@@ -173,34 +125,38 @@ def main():
         manifest = json.load(f)
     seen = set()
     for entry in manifest['images']:
-        size_str = entry['size'].split('x')[0]
-        scale_str = entry['scale'].replace('x', '')
-        px = round(float(size_str) * float(scale_str))
+        px = round(float(entry['size'].split('x')[0]) * float(entry['scale'].replace('x', '')))
         fname = entry['filename']
         if fname in seen:
             continue
         seen.add(fname)
-        save_sized(master_solid, os.path.join(ios_dir, fname), px, rgb=True)
+        save(solid, os.path.join(ios_dir, fname), px)
         print(f'  iOS {fname} -> {px}x{px}')
 
-    # ---------- Android 通常アイコン ----------
-    android_res = os.path.join(ROOT, 'android/app/src/main/res')
-    for density, px in [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)]:
-        save_sized(master_solid, os.path.join(android_res, f'mipmap-{density}/ic_launcher.png'), px, rgb=True)
-        print(f'  Android mipmap-{density}/ic_launcher.png -> {px}x{px}')
+    # iOS 起動画面のマーク
+    launch_dir = os.path.join(ROOT, 'ios/Runner/Assets.xcassets/LaunchImage.imageset')
+    for name, px in [('LaunchImage.png', 200), ('LaunchImage@2x.png', 400), ('LaunchImage@3x.png', 600)]:
+        save(launch, os.path.join(launch_dir, name), px, rgb=False)
+    print('  iOS 起動画面マーク 完了')
 
-    # ---------- Android アダプティブ前景（透明・RGBA） ----------
+    # ---------- Android ----------
+    res = os.path.join(ROOT, 'android/app/src/main/res')
+    for density, px in [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)]:
+        save(solid, os.path.join(res, f'mipmap-{density}/ic_launcher.png'), px)
     for density, px in [('mdpi', 108), ('hdpi', 162), ('xhdpi', 216), ('xxhdpi', 324), ('xxxhdpi', 432)]:
-        save_sized(master_fg, os.path.join(android_res, f'drawable-{density}/ic_launcher_foreground.png'), px, rgb=False)
-        print(f'  Android drawable-{density}/ic_launcher_foreground.png -> {px}x{px}')
+        save(foreground, os.path.join(res, f'drawable-{density}/ic_launcher_foreground.png'), px, rgb=False)
+    # Android 起動画面のマーク（画面中央に表示）
+    for density, px in [('mdpi', 160), ('hdpi', 240), ('xhdpi', 320), ('xxhdpi', 480), ('xxxhdpi', 640)]:
+        save(launch, os.path.join(res, f'drawable-{density}/launch_mark.png'), px, rgb=False)
+    print('  Android アイコン + 起動画面マーク 完了')
 
     # ---------- Web ----------
     web_icons = os.path.join(ROOT, 'web/icons')
-    save_sized(master_solid, os.path.join(web_icons, 'Icon-192.png'), 192, rgb=True)
-    save_sized(master_solid, os.path.join(web_icons, 'Icon-512.png'), 512, rgb=True)
-    save_sized(master_maskable, os.path.join(web_icons, 'Icon-maskable-192.png'), 192, rgb=True)
-    save_sized(master_maskable, os.path.join(web_icons, 'Icon-maskable-512.png'), 512, rgb=True)
-    save_sized(master_solid, os.path.join(ROOT, 'web/favicon.png'), 64, rgb=True)
+    save(solid, os.path.join(web_icons, 'Icon-192.png'), 192)
+    save(solid, os.path.join(web_icons, 'Icon-512.png'), 512)
+    save(maskable, os.path.join(web_icons, 'Icon-maskable-192.png'), 192)
+    save(maskable, os.path.join(web_icons, 'Icon-maskable-512.png'), 512)
+    save(solid, os.path.join(ROOT, 'web/favicon.png'), 64)
     print('  Web icons + favicon 完了')
 
     print('\n全アイコン生成完了！')

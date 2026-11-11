@@ -1,7 +1,7 @@
 ﻿name: runbike_app
 description: "ランバイク練習・タイム計測アプリ"
 publish_to: 'none'
-version: 1.0.8+13
+version: 1.1.0+14
 
 environment:
   sdk: ^3.11.1
@@ -28,8 +28,8 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/app_icon.png"
-  adaptive_icon_background: "#2E7D32"
-  adaptive_icon_foreground: "assets/app_icon.png"
+  adaptive_icon_background: "#0F1512"
+  adaptive_icon_foreground: "assets/app_icon_foreground.png"
 
 flutter:
   uses-material-design: true
@@ -39,7 +39,16 @@ flutter:
     - family: Noto Sans JP
       fonts:
         - asset: assets/fonts/NotoSansJP-VariableFont_wght.ttf
-    # タイム表示・見出し用のレーシング系フォント（SIL OFLライセンス）
-    - family: Orbitron
+    # タイム表示・英字見出し用の細身の斜体フォント（SIL OFLライセンス）
+    - family: Barlow Condensed
       fonts:
-        - asset: assets/fonts/Orbitron-VariableFont_wght.ttf
+        - asset: assets/fonts/BarlowCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/BarlowCondensed-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/BarlowCondensed-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf
+          weight: 800
+          style: italic

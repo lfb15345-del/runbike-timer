@@ -10,6 +10,7 @@ import '../services/web_camera_service.dart';
 import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
 import '../widgets/camera_wipe.dart';
+import '../widgets/select_pill.dart';
 import '../widgets/timer_text.dart';
 import '../theme.dart';
 
@@ -28,7 +29,7 @@ class MeasureScreen extends StatefulWidget {
 }
 
 class _MeasureScreenState extends State<MeasureScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   TimerState _state = TimerState.waiting;
   bool _isTeamMode = false;
 
@@ -66,9 +67,16 @@ class _MeasureScreenState extends State<MeasureScreen>
   // チームモード
   final Map<int, int> _teamFinished = {};
 
+  // カウントダウン（READY）の進み具合バー
+  late final AnimationController _readyController;
+
   @override
   void initState() {
     super.initState();
+    _readyController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    );
     WidgetsBinding.instance.addObserver(this);
     _loadChildren();
     _initCameras();
@@ -92,6 +100,7 @@ class _MeasureScreenState extends State<MeasureScreen>
     AppSettings.currentTab.removeListener(_onTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _readyController.dispose();
     _cameraController?.dispose();
     super.dispose();
   }
@@ -332,6 +341,10 @@ class _MeasureScreenState extends State<MeasureScreen>
     final DateTime measureStart;
 
     if (_selectedSound.assetPath != null) {
+      // READYの進み具合バーを、GO!までの時間ぴったりで動かす
+      _readyController.duration = Duration(milliseconds: offset > 0 ? offset : 1);
+      _readyController.forward(from: 0);
+
       final playStartTime = DateTime.now();
       SoundService.playStartSound(_selectedSound);
       measureStart = playStartTime.add(Duration(milliseconds: offset));
@@ -375,6 +388,7 @@ class _MeasureScreenState extends State<MeasureScreen>
   void _onCancel() {
     SoundService.stopAll();
     _timer?.cancel();
+    _readyController.stop();
 
     // 録画中なら停止
     if (_isVideoRecording) {
@@ -389,7 +403,7 @@ class _MeasureScreenState extends State<MeasureScreen>
                 duration: const Duration(seconds: 10),
                 action: SnackBarAction(
                   label: '録画を確認',
-                  textColor: Colors.yellow,
+                  textColor: AppTheme.volt,
                   onPressed: () {
                     WebCameraService.showPendingRecording();
                   },
@@ -463,7 +477,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           duration: const Duration(seconds: 10),
           action: SnackBarAction(
             label: '録画を確認',
-            textColor: Colors.yellow,
+            textColor: AppTheme.volt,
             onPressed: () {
               WebCameraService.showPendingRecording();
             },
@@ -684,339 +698,433 @@ class _MeasureScreenState extends State<MeasureScreen>
   //  UI
   // ========================================
 
+  /// 背景色: 待機 = 紙色 / カウントダウン = 墨色 / 計測中 = 黄緑
+  Color get _backgroundColor {
+    switch (_state) {
+      case TimerState.waiting:
+        return AppTheme.paper;
+      case TimerState.countdown:
+        return AppTheme.ink;
+      case TimerState.measuring:
+        return AppTheme.volt;
+    }
+  }
+
+  /// 文字色（背景の反対色）
+  Color get _foregroundColor =>
+      _state == TimerState.countdown ? AppTheme.paper : AppTheme.ink;
+
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final dateStr =
-        '${today.year}/${today.month.toString().padLeft(2, '0')}/${today.day.toString().padLeft(2, '0')}';
-    final isMeasuring = _state == TimerState.measuring;
+    final isWaiting = _state == TimerState.waiting;
 
     return Scaffold(
-      // 計測中は背景色を変えて視覚的に強調
-      backgroundColor: isMeasuring ? Colors.green[50] : null,
-      body: SafeArea(
-        child: Stack(
+      // 状態ごとに画面全体の色を切り替える（遠くからでも今の状態が分かる）
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        width: double.infinity,
+        height: double.infinity,
+        color: _backgroundColor,
+        child: SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: isWaiting ? _buildWaiting() : _buildActive(),
+              ),
+
+              // --- カメラプレビュー（ワイプ）ネイティブ版のみ ---
+              // Web版はJS側でHTMLビデオ要素をフローティング表示
+              if (!kIsWeb &&
+                  _isRecordingEnabled &&
+                  _isCameraInitialized &&
+                  _cameraController != null)
+                CameraWipe(
+                  controller: _cameraController!,
+                  isRecording: _isVideoRecording,
+                  zoom: _camZoom,
+                  onZoomRequest: _applyCameraZoom,
+                  onSwitchCamera: _switchCamera,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------
+  //  待機中の画面（設定 + スタートボタン）
+  // ----------------------------------------
+
+  Widget _buildWaiting() {
+    final today = DateTime.now();
+    final dateStr =
+        '${today.year}.${today.month.toString().padLeft(2, '0')}.${today.day.toString().padLeft(2, '0')}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // --- 上部: 日付 + 個人/チーム切替 ---
+        Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+            Text(dateStr,
+                style: AppTheme.labelStyle(
+                    fontSize: 16, color: AppTheme.muted)),
+            const Spacer(),
+            SelectPill(
+              label: '個人',
+              compact: true,
+              selected: !_isTeamMode,
+              onTap: () => setState(() => _isTeamMode = false),
+            ),
+            const SizedBox(width: 6),
+            SelectPill(
+              label: 'チーム',
+              compact: true,
+              selected: _isTeamMode,
+              onTap: () => setState(() => _isTeamMode = true),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        // --- 練習する子ども ---
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                _currentChildName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 26, fontWeight: FontWeight.w900, height: 1.2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton(
+              onPressed: _showChildSelector,
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+              child: const Text('変更'),
+            ),
+          ],
+        ),
+
+        // --- 中央: タイム（直前の記録が残る）。画面が狭ければ自動で縮む ---
+        Expanded(
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              // TimerText = 1文字ずつ固定幅で描いて震えを防止
+              child: TimerText(
+                _formatTime(_elapsedMs),
+                style: AppTheme.timerStyle(fontSize: 150),
+              ),
+            ),
+          ),
+        ),
+
+        // --- スタート音 ---
+        _sectionLabel('スタート音'),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: SoundConfig.all.map((sound) {
+            return SelectPill(
+              label: sound.label,
+              selected: _selectedSound.key == sound.key,
+              onTap: () => setState(() => _selectedSound = sound),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 12),
+
+        // --- 計測中BGM（走行の疾走感演出） ---
+        _sectionLabel('走行中BGM'),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: MeasureBgmConfig.all.map((bgm) {
+            return SelectPill(
+              label: bgm.label,
+              compact: true,
+              selected: _selectedBgm.key == bgm.key,
+              onTap: () => setState(() => _selectedBgm = bgm),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+        const Divider(height: 1),
+
+        // --- 録画スイッチ ---
+        Row(
+          children: [
+            const Icon(Icons.videocam, size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('録画',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            ),
+            Switch(
+              value: _isRecordingEnabled,
+              onChanged: _toggleRecording,
+              activeThumbColor: Colors.white,
+              activeTrackColor: AppTheme.recordRed,
+            ),
+          ],
+        ),
+        const Divider(height: 1),
+        const SizedBox(height: 8),
+
+        // --- Bluetooth遅延補正 ---
+        Center(child: BtOffsetControl(onChanged: () => setState(() {}))),
+        const SizedBox(height: 12),
+
+        // --- スタートボタン ---
+        _bigButton(
+          label: 'START',
+          latin: true,
+          height: 76,
+          background: AppTheme.ink,
+          foreground: AppTheme.volt,
+          onTap: _onStart,
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionLabel(String text) {
+    return Text(text,
+        style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.muted));
+  }
+
+  // ----------------------------------------
+  //  カウントダウン中・計測中の画面
+  // ----------------------------------------
+
+  Widget _buildActive() {
+    final fg = _foregroundColor;
+    final isMeasuring = _state == TimerState.measuring;
+    final showTeamButtons = _isTeamMode && isMeasuring;
+
+    // 見出し + 大きなタイム
+    final timerBlock = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          isMeasuring ? 'GO' : 'READY',
+          style: AppTheme.displayStyle(
+              fontSize: 64, color: fg, letterSpacing: 2),
+        ),
+        TimerText(
+          _formatTime(_elapsedMs),
+          style: AppTheme.timerStyle(fontSize: 220, color: fg),
+        ),
+      ],
+    );
+
+    return Column(
+      children: [
+        // --- 上段: 子どもの名前 + 録画表示 ---
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                _isTeamMode ? 'チーム' : _currentChildName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w900, color: fg),
+              ),
+            ),
+            const Spacer(),
+            if (_isVideoRecording)
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // --- 上部: 日付・子ども・モード（計測中は最小限） ---
-                  if (!isMeasuring) ...[
-                    Text(dateStr,
-                        style:
-                            const TextStyle(fontSize: 16, color: Colors.grey)),
-                    const SizedBox(height: 8),
-                  ],
-                  Row(
+                  const Icon(Icons.fiber_manual_record,
+                      size: 16, color: AppTheme.recordRed),
+                  const SizedBox(width: 4),
+                  Text('録画中',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: fg)),
+                ],
+              ),
+          ],
+        ),
+
+        // --- 中央: タイム ---
+        if (!showTeamButtons)
+          Expanded(
+            child: Center(
+              child: FittedBox(fit: BoxFit.scaleDown, child: timerBlock),
+            ),
+          ),
+
+        // --- カウントダウン中: GO!までの進み具合バー + 中止 ---
+        if (_state == TimerState.countdown) ...[
+          AnimatedBuilder(
+            animation: _readyController,
+            builder: (context, _) => ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                height: 8,
+                color: fg.withValues(alpha: 0.18),
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: _readyController.value,
+                  heightFactor: 1,
+                  child: ColoredBox(color: fg),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _bigButton(
+            label: '中止',
+            background: Colors.transparent,
+            foreground: fg,
+            borderColor: fg,
+            onTap: _onCancel,
+          ),
+        ],
+
+        // --- 計測中（個人）: ゴールボタン ---
+        if (isMeasuring && !_isTeamMode)
+          _bigButton(
+            label: 'ゴール！',
+            height: 104,
+            fontSize: 34,
+            background: AppTheme.ink,
+            foreground: Colors.white,
+            onTap: _onGoal,
+          ),
+
+        // --- 計測中（チーム）: 小さめのタイム + 子どもボタン ---
+        if (showTeamButtons) ...[
+          SizedBox(
+            height: 130,
+            child: FittedBox(fit: BoxFit.scaleDown, child: timerBlock),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: GridView.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.2,
+              children: _children.map((child) {
+                final childId = child['id'] as int;
+                final childName = child['name'] as String;
+                final isFinished = _teamFinished.containsKey(childId);
+                final finishTime = _teamFinished[childId];
+                int rank = 0;
+                if (isFinished) {
+                  rank = _teamFinished.values
+                      .where((t) => t <= finishTime!)
+                      .length;
+                }
+
+                return ElevatedButton(
+                  onPressed:
+                      isFinished ? null : () => _onTeamGoal(childId, childName),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.ink,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        AppTheme.ink.withValues(alpha: 0.12),
+                    disabledForegroundColor: AppTheme.ink,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        _currentChildName,
+                        childName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: isMeasuring ? 18 : 22,
+                          fontSize: isFinished ? 16 : 22,
                           fontWeight: FontWeight.bold,
-                          color: isMeasuring ? Colors.green[800] : null,
                         ),
                       ),
-                      if (!isMeasuring) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: _state == TimerState.waiting
-                              ? _showChildSelector
-                              : null,
-                          child: const Text('変更'),
+                      if (isFinished)
+                        Text(
+                          '$rank着 ${_formatTime(finishTime!)}秒',
+                          style: const TextStyle(fontSize: 14),
                         ),
-                      ],
                     ],
                   ),
-                  if (!isMeasuring) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('個人'),
-                        Switch(
-                          value: _isTeamMode,
-                          onChanged: _state == TimerState.waiting
-                              ? (v) => setState(() => _isTeamMode = v)
-                              : null,
-                        ),
-                        const Text('チーム'),
-                      ],
-                    ),
-                  ],
-
-                  const Spacer(),
-
-                  // --- 中央: タイマー表示（計測中はさらに大きく） ---
-                  // TimerText = 1文字ずつ固定幅で描いて震えを防止
-                  // FittedBox = 1行のまま画面幅に収める（改行・はみ出し防止）
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: TimerText(
-                        _formatTime(_elapsedMs),
-                        style: AppTheme.timerStyle(
-                          fontSize: isMeasuring ? 88 : 72,
-                          color: isMeasuring ? Colors.green[900] : null,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _state == TimerState.waiting
-                        ? '待機中'
-                        : _state == TimerState.countdown
-                            ? 'カウントダウン中...'
-                            : '計測中',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: _state == TimerState.measuring
-                          ? Colors.red
-                          : Colors.grey,
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // --- スタート音選択（計測中は非表示） ---
-                  if (!isMeasuring)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: SoundConfig.all.map((sound) {
-                        final isSelected = _selectedSound.key == sound.key;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: ChoiceChip(
-                            label: Text(sound.label),
-                            selected: isSelected,
-                            onSelected: _state == TimerState.waiting
-                                ? (_) =>
-                                    setState(() => _selectedSound = sound)
-                                : null,
-                          ),
-                        );
-                      }).toList(),
-                    ),
-
-                  // --- 計測中BGM選択（走行の疾走感演出。計測中は非表示） ---
-                  // Wrapで狭い画面でも見切れず折り返す
-                  if (!isMeasuring) ...[
-                    const SizedBox(height: 6),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 4,
-                      children: [
-                        const Icon(Icons.music_note, size: 16,
-                            color: Colors.grey),
-                        const Text('走行中BGM:',
-                            style:
-                                TextStyle(fontSize: 12, color: Colors.grey)),
-                        ...MeasureBgmConfig.all.map((bgm) {
-                          final isSelected = _selectedBgm.key == bgm.key;
-                          return ChoiceChip(
-                            label: Text(bgm.label,
-                                style: const TextStyle(fontSize: 12)),
-                            visualDensity: VisualDensity.compact,
-                            selected: isSelected,
-                            onSelected: _state == TimerState.waiting
-                                ? (_) => setState(() => _selectedBgm = bgm)
-                                : null,
-                          );
-                        }),
-                      ],
-                    ),
-                  ],
-
-                  if (!isMeasuring) const SizedBox(height: 8),
-
-                  // --- 録画スイッチ（計測中は非表示） ---
-                  if (!isMeasuring)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _isVideoRecording
-                              ? Icons.fiber_manual_record
-                              : Icons.videocam,
-                          size: 20,
-                          color: _isVideoRecording ? Colors.red : null,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _isVideoRecording ? '録画中' : '録画',
-                          style: TextStyle(
-                            color: _isVideoRecording ? Colors.red : null,
-                            fontWeight:
-                                _isVideoRecording ? FontWeight.bold : null,
-                          ),
-                        ),
-                        Switch(
-                          value: _isRecordingEnabled,
-                          onChanged: _state == TimerState.waiting
-                              ? _toggleRecording
-                              : null,
-                          activeThumbColor: Colors.red,
-                        ),
-                      ],
-                    ),
-
-                  // --- Bluetooth遅延補正（計測中は非表示） ---
-                  if (!isMeasuring)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: BtOffsetControl(
-                        enabled: _state == TimerState.waiting,
-                        onChanged: () => setState(() {}),
-                      ),
-                    ),
-
-                  const Spacer(),
-
-                  // --- メイン操作ボタン ---
-                  if (_state == TimerState.waiting)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 80,
-                      child: ElevatedButton(
-                        onPressed: _onStart,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.brandGreen,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('スタート（3,2,1,GO!）',
-                            style: TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-
-                  if (_state == TimerState.countdown)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 80,
-                      child: ElevatedButton(
-                        onPressed: _onCancel,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('中止',
-                            style: TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-
-                  if (_state == TimerState.measuring && !_isTeamMode)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 80,
-                      child: ElevatedButton(
-                        onPressed: _onGoal,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.goRed,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('ゴール！',
-                            style: TextStyle(
-                                fontSize: 32, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-
-                  // --- チームモード: 子どもボタン ---
-                  if (_isTeamMode && _state == TimerState.measuring) ...[
-                    Expanded(
-                      child: GridView.count(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 2.2,
-                        children: _children.map((child) {
-                          final childId = child['id'] as int;
-                          final childName = child['name'] as String;
-                          final isFinished =
-                              _teamFinished.containsKey(childId);
-                          final finishTime = _teamFinished[childId];
-                          int rank = 0;
-                          if (isFinished) {
-                            rank = _teamFinished.values
-                                .where((t) => t <= finishTime!)
-                                .length;
-                          }
-
-                          return ElevatedButton(
-                            onPressed: isFinished
-                                ? null
-                                : () => _onTeamGoal(childId, childName),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  isFinished ? Colors.grey[400] : Colors.blue,
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.green[100],
-                              disabledForegroundColor: Colors.green[900],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  childName,
-                                  style: TextStyle(
-                                    fontSize: isFinished ? 16 : 22,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                if (isFinished)
-                                  Text(
-                                    '$rank着 ${_formatTime(finishTime!)}秒',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _onCancel,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.accentAmber,
-                          foregroundColor: const Color(0xFF072016),
-                        ),
-                        child: const Text('次のレースへ',
-                            style: TextStyle(fontSize: 18)),
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 16),
-                ],
-              ),
+                );
+              }).toList(),
             ),
+          ),
+          const SizedBox(height: 8),
+          _bigButton(
+            label: '次のレースへ',
+            height: 54,
+            background: Colors.transparent,
+            foreground: fg,
+            borderColor: fg,
+            onTap: _onCancel,
+          ),
+        ],
+      ],
+    );
+  }
 
-            // --- カメラプレビュー（ワイプ）ネイティブ版のみ ---
-            // Web版はJS側でHTMLビデオ要素をフローティング表示
-            if (!kIsWeb &&
-                _isRecordingEnabled &&
-                _isCameraInitialized &&
-                _cameraController != null)
-              CameraWipe(
-                controller: _cameraController!,
-                isRecording: _isVideoRecording,
-                zoom: _camZoom,
-                onZoomRequest: _applyCameraZoom,
-                onSwitchCamera: _switchCamera,
-              ),
-          ],
+  /// 画面下の大きなボタン
+  Widget _bigButton({
+    required String label,
+    required Color background,
+    required Color foreground,
+    required VoidCallback onTap,
+    Color? borderColor,
+    double height = 64,
+    double fontSize = 20,
+    bool latin = false,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: Material(
+        color: background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: borderColor != null
+              ? BorderSide(color: borderColor, width: 2)
+              : BorderSide.none,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Center(
+            child: Text(
+              label,
+              style: latin
+                  ? AppTheme.displayStyle(
+                      fontSize: 34, color: foreground, letterSpacing: 3)
+                  : TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.bold,
+                      color: foreground,
+                    ),
+            ),
+          ),
         ),
       ),
     );

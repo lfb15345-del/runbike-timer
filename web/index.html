@@ -249,25 +249,61 @@
       return true;
     }
 
-    function playSoundBuffer(filename) {
+    // 一時停止・再開のために「いま何を、どの位置から鳴らしているか」を覚えておく
+    var _currentSoundName = null;
+    var _currentSoundOffset = 0;     // 再生を始めた位置（秒）
+    var _currentSoundStartedAt = 0;  // 再生を始めた時刻（AudioContextの時計）
+    var _pausedSound = null;         // 一時停止中の音 { name, offsetMs }
+
+    // fromMs を指定すると音声の途中から鳴らす
+    function playSoundBuffer(filename, fromMs) {
       stopSoundBuffer();
       var buffer = _soundBuffers[filename];
       if (!buffer) {
         console.warn('[Audio] Not preloaded: ' + filename);
         return false;
       }
+      var offset = (fromMs || 0) / 1000;
+      if (offset >= buffer.duration) return false;
       var ctx = getAudioCtx();
       var source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(getAudioOutput());
-      source.start(0);
+      source.start(0, offset);
       _currentSoundSource = source;
-      source.onended = function() { _currentSoundSource = null; };
+      _currentSoundName = filename;
+      _currentSoundOffset = offset;
+      _currentSoundStartedAt = ctx.currentTime;
+      // 鳴り終わったのが「いまの音」のときだけ片付ける（古い音の終了通知で新しい音を消さない）
+      source.onended = function() {
+        if (_currentSoundSource === source) _currentSoundSource = null;
+      };
       return true;
+    }
+
+    // 再生中のスタート音を一時停止（位置を覚えて止める）
+    function pauseSoundBuffer() {
+      if (!_currentSoundSource) return;
+      var ctx = getAudioCtx();
+      _pausedSound = {
+        name: _currentSoundName,
+        offsetMs: (_currentSoundOffset + ctx.currentTime - _currentSoundStartedAt) * 1000
+      };
+      try { _currentSoundSource.stop(); } catch(e) {}
+      _currentSoundSource = null;
+    }
+
+    // 一時停止したスタート音を続きから再開
+    function resumeSoundBuffer() {
+      if (!_pausedSound) return;
+      var paused = _pausedSound;
+      _pausedSound = null;
+      playSoundBuffer(paused.name, paused.offsetMs);
     }
 
     // 再生中のスタート音を停止
     function stopSoundBuffer() {
+      _pausedSound = null;
       if (_currentSoundSource) {
         try { _currentSoundSource.stop(); } catch(e) {}
         _currentSoundSource = null;

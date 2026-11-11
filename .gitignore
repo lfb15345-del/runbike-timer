@@ -48,3 +48,11 @@ app.*.map.json
 android/key.properties
 *.jks
 *.keystore
+
+# 動作チェック用の一時ファイル
+check_result.txt
+tool/_icon_check.png
+check.bat
+publish.bat
+publish_result.txt
+commit_msg.txt
