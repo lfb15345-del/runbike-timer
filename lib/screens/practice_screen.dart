@@ -13,6 +13,7 @@ import '../widgets/camera_wipe.dart';
 import '../widgets/select_pill.dart';
 import '../widgets/timer_text.dart';
 import '../theme.dart';
+import 'measure_screen.dart';
 
 /// インターバル練習の状態
 enum PracticePhase { idle, countdown, sprint, rest, finished }
@@ -21,8 +22,11 @@ enum PracticePhase { idle, countdown, sprint, rest, finished }
 class PracticeScreen extends StatefulWidget {
   const PracticeScreen({super.key});
 
-  /// 他の画面からチェック用（練習中はタブ切替をブロック）
+  /// 他の画面からチェック用（練習中かどうか）
   static bool isRunning = false;
+
+  /// 録画スイッチがONか（録画しながらの練習中はタブ切替を止めるため）
+  static bool isRecordingOn = false;
 
   @override
   State<PracticeScreen> createState() => _PracticeScreenState();
@@ -88,6 +92,8 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   // 最初のカウントダウン（READY）の進み具合バー
   late final AnimationController _readyController;
+  DateTime? _countdownStartTime; // カウントダウンを始めた時刻
+  int _countdownTotalMs = 0; // GO!までの長さ
 
   @override
   void initState() {
@@ -133,6 +139,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   /// 録画スイッチのON/OFF（ONの間はカメラ映像の小窓が出る）
   void _toggleRecording(bool value) {
+    PracticeScreen.isRecordingOn = value;
     setState(() => _isRecordingEnabled = value);
     if (value) {
       _recorder.open();
@@ -144,6 +151,17 @@ class _PracticeScreenState extends State<PracticeScreen>
   /// 練習タブを離れたらカメラを手放し、戻ってきたら付け直す
   /// （計測タブも同じカメラを使うため、同時に持たないようにする）
   void _onTabChanged() {
+    // 別のタブから戻ってきたとき、READYのバーを実際の経過時間に合わせ直す
+    // （隠れている間はバーのアニメーションが止まるため）
+    if (AppSettings.currentTab.value == 1 &&
+        _phase == PracticePhase.countdown &&
+        _countdownStartTime != null &&
+        _countdownTotalMs > 0) {
+      final elapsedMs =
+          DateTime.now().difference(_countdownStartTime!).inMilliseconds;
+      _readyController.forward(
+          from: (elapsedMs / _countdownTotalMs).clamp(0.0, 1.0).toDouble());
+    }
     if (!_isRecordingEnabled) return;
     if (AppSettings.currentTab.value == 1) {
       _recorder.open();
@@ -212,6 +230,14 @@ class _PracticeScreenState extends State<PracticeScreen>
   Future<void> _onStart() async {
     // 連打防止: 待機中でなければ受け付けない（画面が切り替わる前の2度押し対策）
     if (_phase != PracticePhase.idle) return;
+    // 計測タブが動いている間は始めない（音が重なって両方おかしくなるため）
+    if (MeasureScreen.isRunning) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('計測タブが実行中です。計測を終えてからスタートしてください'),
+        duration: Duration(seconds: 2),
+      ));
+      return;
+    }
     final generation = ++_startGeneration;
 
     // スタート音のオフセット + BT補正 後にGO!
@@ -229,6 +255,8 @@ class _PracticeScreenState extends State<PracticeScreen>
     if (_isRecordingEnabled) _recorder.resetCount();
 
     // READYの進み具合バーを、GO!までの時間ぴったりで動かす
+    _countdownStartTime = DateTime.now();
+    _countdownTotalMs = totalOffset;
     _readyController.duration =
         Duration(milliseconds: math.max(totalOffset, 1));
     _readyController.forward(from: 0);

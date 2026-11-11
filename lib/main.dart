@@ -181,12 +181,15 @@ class _HomePageState extends State<HomePage> {
       SoundService.playRefereeWhistle();
       return;
     }
-    // 計測中 or 練習中はタブ切替を防止
-    if (MeasureScreen.isRunning || PracticeScreen.isRunning) {
+    // 計測中・練習中でもタブは切り替えられる（タイマーと音は裏でそのまま進む）。
+    // ただし「録画しながら」のときだけは止める
+    // （タブを離れるとカメラを手放すので、録画が途中で切れてしまうため）
+    if ((MeasureScreen.isRunning && MeasureScreen.isRecordingOn) ||
+        (PracticeScreen.isRunning && PracticeScreen.isRecordingOn)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('実行中はタブを切り替えられません'),
-          duration: Duration(seconds: 1),
+          content: Text('録画中はタブを切り替えられません'),
+          duration: Duration(seconds: 2),
         ),
       );
       return;

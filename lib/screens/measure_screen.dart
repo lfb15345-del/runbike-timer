@@ -13,6 +13,7 @@ import '../widgets/camera_wipe.dart';
 import '../widgets/select_pill.dart';
 import '../widgets/timer_text.dart';
 import '../theme.dart';
+import 'practice_screen.dart';
 
 /// タイマーの状態
 enum TimerState { waiting, countdown, measuring }
@@ -21,8 +22,11 @@ enum TimerState { waiting, countdown, measuring }
 class MeasureScreen extends StatefulWidget {
   const MeasureScreen({super.key});
 
-  /// 他の画面からチェック用（計測中はタブ切替をブロック）
+  /// 他の画面からチェック用（計測中かどうか）
   static bool isRunning = false;
+
+  /// 録画スイッチがONか（録画しながらの計測中はタブ切替を止めるため）
+  static bool isRecordingOn = false;
 
   @override
   State<MeasureScreen> createState() => _MeasureScreenState();
@@ -69,6 +73,8 @@ class _MeasureScreenState extends State<MeasureScreen>
 
   // カウントダウン（READY）の進み具合バー
   late final AnimationController _readyController;
+  DateTime? _countdownStartTime; // カウントダウンを始めた時刻
+  int _countdownTotalMs = 0; // GO!までの長さ
 
   @override
   void initState() {
@@ -87,6 +93,17 @@ class _MeasureScreenState extends State<MeasureScreen>
   /// 他のタブ（練習など）に移ったらカメラを手放し、戻ってきたら付け直す
   /// （カメラは同時に1画面しか使えないため。録画スイッチ自体はONのまま）
   void _onTabChanged() {
+    // 別のタブから戻ってきたとき、READYのバーを実際の経過時間に合わせ直す
+    // （隠れている間はバーのアニメーションが止まるため）
+    if (AppSettings.currentTab.value == 0 &&
+        _state == TimerState.countdown &&
+        _countdownStartTime != null &&
+        _countdownTotalMs > 0) {
+      final elapsedMs =
+          DateTime.now().difference(_countdownStartTime!).inMilliseconds;
+      _readyController.forward(
+          from: (elapsedMs / _countdownTotalMs).clamp(0.0, 1.0).toDouble());
+    }
     if (kIsWeb || !_isRecordingEnabled) return;
     if (AppSettings.currentTab.value == 0) {
       if (!_isCameraInitialized) _setupCamera();
@@ -262,6 +279,7 @@ class _MeasureScreenState extends State<MeasureScreen>
 
   /// 録画スイッチのON/OFF
   Future<void> _toggleRecording(bool value) async {
+    MeasureScreen.isRecordingOn = value;
     if (kIsWeb) {
       // === Web版: JS経由でカメラ起動 ===
       setState(() => _isRecordingEnabled = value);
@@ -269,6 +287,7 @@ class _MeasureScreenState extends State<MeasureScreen>
         final ok = await WebCameraService.startPreview();
         if (!ok) {
           _showMessage('カメラを起動できませんでした');
+          MeasureScreen.isRecordingOn = false;
           setState(() => _isRecordingEnabled = false);
         }
       } else {
@@ -318,6 +337,11 @@ class _MeasureScreenState extends State<MeasureScreen>
   Future<void> _onStart() async {
     // 連打防止: 待機中でなければ受け付けない（画面が切り替わる前の2度押し対策）
     if (_state != TimerState.waiting) return;
+    // 練習タブが動いている間は始めない（音が重なって両方おかしくなるため）
+    if (PracticeScreen.isRunning) {
+      _showMessage('練習タブが実行中です。練習を止めてからスタートしてください');
+      return;
+    }
     final generation = ++_startGeneration;
 
     // スタート音のオフセット + Bluetooth補正
@@ -342,6 +366,8 @@ class _MeasureScreenState extends State<MeasureScreen>
 
     if (_selectedSound.assetPath != null) {
       // READYの進み具合バーを、GO!までの時間ぴったりで動かす
+      _countdownStartTime = DateTime.now();
+      _countdownTotalMs = offset;
       _readyController.duration = Duration(milliseconds: offset > 0 ? offset : 1);
       _readyController.forward(from: 0);
 
