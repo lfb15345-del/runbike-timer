@@ -28,7 +28,9 @@ if ($LASTEXITCODE -ne 0) { throw 'APKのビルドに失敗しました' }
 $apk = Join-Path $buildDir 'build\app\outputs\flutter-apk\app-release.apk'
 
 # 3. 中身のバージョンと署名を確認
-$bt = Get-ChildItem "$env:LOCALAPPDATA\Android\Sdk\build-tools" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+# SDKの場所: 環境変数 ANDROID_HOME があればそれを使う（publish.bat が設定する）
+$sdkDir = if ($env:ANDROID_HOME -and (Test-Path $env:ANDROID_HOME)) { $env:ANDROID_HOME } else { "$env:LOCALAPPDATA\Android\Sdk" }
+$bt = Get-ChildItem "$sdkDir\build-tools" -Directory | Sort-Object Name -Descending | Select-Object -First 1
 $aapt = Get-ChildItem "$($bt.FullName)\aapt*.exe" | Select-Object -First 1
 $badging = (& $aapt.FullName dump badging $apk | Select-Object -First 1)
 if ($badging -notmatch "versionCode='$versionCode'" -or $badging -notmatch "versionName='$versionName'") {
