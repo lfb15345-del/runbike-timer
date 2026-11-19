@@ -1,7 +1,8 @@
 // App Store 用スクリーンショットを自動で作る道具（実機なしで、アプリの実際の画面を描いて保存する）
 //
 // 実行: flutter test tool/screenshots_test.dart   （check.bat からも実行される）
-// 出力: ランバイク/appstore_screenshots/v1.1.0/ に 1242x2688 のPNG（iPhone 6.5インチ用）
+// 出力: ランバイク/appstore_screenshots/latest/ に 1206x2622 のPNG
+//       （App Store Connect の「iPhone 6.3インチ」枠にそのまま入れられるサイズ）
 //
 // 仕組み: テスト用の仮想画面に本物の画面ウィジェットを表示して画像にする。
 // データベース・音・カメラは実機がないと動かないので、見本データを返す「代役」に差し替えている。
@@ -23,7 +24,7 @@ import 'package:runbike_app/services/database_service.dart';
 import 'package:runbike_app/theme.dart';
 
 final GlobalKey _shotKey = GlobalKey();
-const String _outDir = '../appstore_screenshots/v1.1.0';
+const String _outDir = '../appstore_screenshots/latest';
 
 /// フォントを読み込む（読み込まないとテスト画面では文字が四角になる）
 Future<void> _loadFont(String family, List<String> paths) async {
@@ -150,12 +151,12 @@ Widget _frame(Widget screen, int tabIndex) {
   );
 }
 
-/// iPhone 6.5インチ相当の画面サイズにする（上下の余白 = ノッチとホームバーの分）
+/// iPhone 6.3インチ相当の画面サイズにする（上下の余白 = Dynamic Island とホームバーの分）
 void _useIphoneSize(WidgetTester tester) {
-  tester.view.physicalSize = const Size(1242, 2688);
+  tester.view.physicalSize = const Size(1206, 2622);
   tester.view.devicePixelRatio = 3.0;
-  tester.view.padding = const FakeViewPadding(top: 141, bottom: 102);
-  tester.view.viewPadding = const FakeViewPadding(top: 141, bottom: 102);
+  tester.view.padding = const FakeViewPadding(top: 177, bottom: 102);
+  tester.view.viewPadding = const FakeViewPadding(top: 177, bottom: 102);
   addTearDown(tester.view.reset);
 }
 

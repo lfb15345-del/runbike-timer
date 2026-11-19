@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -33,6 +34,13 @@ class RunbikeApp extends StatelessWidget {
       title: 'ランバイクタイマー',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ja', 'JP'),
+      // 文字入力のメニュー（コピー・貼り付け）や日付などの標準部品も日本語にする
+      supportedLocales: const [Locale('ja', 'JP')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       // テーマは theme.dart に一元化（色・ボタン・チップ・タブバー）
       theme: AppTheme.light(),
       // Web版は音声解禁画面を最初に表示

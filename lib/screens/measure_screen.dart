@@ -7,6 +7,7 @@ import '../services/database_service.dart';
 import '../services/sound_service.dart';
 import '../services/app_settings.dart';
 import '../services/background_keeper.dart';
+import '../services/review_prompter.dart';
 import '../services/web_camera_service.dart';
 import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
@@ -488,6 +489,9 @@ class _MeasureScreenState extends State<MeasureScreen>
       return;
     }
 
+    // 保存する前に、これまでの自己ベストを調べておく
+    final previousBest = await DatabaseService.getAllTimeBest(_currentChildId!);
+
     final sessionId = await DatabaseService.getTodaySessionId();
     final runId = await DatabaseService.addRun(
       sessionId: sessionId,
@@ -499,12 +503,25 @@ class _MeasureScreenState extends State<MeasureScreen>
       timeMs: finalTime,
     );
 
+    // 自己ベスト更新（2本目以降で、これまでの最速より速い）
+    final isPersonalBest = previousBest != null && finalTime < previousBest;
+    final recordMessage = isPersonalBest
+        ? '${_formatTime(finalTime)} 秒　自己ベスト更新！'
+        : '${_formatTime(finalTime)} 秒 を記録しました！';
+    if (isPersonalBest) {
+      // 喜んでいる瞬間に、少し間をおいて App Store の評価をお願いする（iPhoneのみ・控えめに）
+      Future.delayed(
+        const Duration(milliseconds: 1800),
+        ReviewPrompter.maybeAskAfterPersonalBest,
+      );
+    }
+
     // Web版で録画ありの場合: 「録画を確認」ボタン付きメッセージ
     if (kIsWeb && hadRecording && WebCameraService.hasPendingRecording()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${_formatTime(finalTime)} 秒 を記録しました！'),
+          content: Text(recordMessage),
           duration: const Duration(seconds: 10),
           action: SnackBarAction(
             label: '録画を確認',
@@ -516,7 +533,7 @@ class _MeasureScreenState extends State<MeasureScreen>
         ),
       );
     } else {
-      _showMessage('${_formatTime(finalTime)} 秒 を記録しました！');
+      _showMessage(recordMessage, seconds: isPersonalBest ? 3 : 2);
     }
   }
 
