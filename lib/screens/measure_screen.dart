@@ -356,8 +356,10 @@ class _MeasureScreenState extends State<MeasureScreen>
     }
     final generation = ++_startGeneration;
 
+    // 実際に鳴らす音（BMXは毎回ランダムに待ち時間の違う音を選ぶ）
+    final sound = SoundConfig.forPlay(_selectedSound);
     // スタート音のオフセット + Bluetooth補正
-    final offset = _selectedSound.offsetMs + AppSettings.bluetoothOffsetMs;
+    final offset = sound.offsetMs + AppSettings.bluetoothOffsetMs;
 
     setState(() {
       _state = TimerState.countdown;
@@ -378,7 +380,7 @@ class _MeasureScreenState extends State<MeasureScreen>
 
     final DateTime measureStart;
 
-    if (_selectedSound.assetPath != null) {
+    if (sound.assetPath != null) {
       // READYの進み具合バーを、GO!までの時間ぴったりで動かす
       _countdownStartTime = DateTime.now();
       _countdownTotalMs = offset;
@@ -386,7 +388,7 @@ class _MeasureScreenState extends State<MeasureScreen>
       _readyController.forward(from: 0);
 
       final playStartTime = DateTime.now();
-      SoundService.playStartSound(_selectedSound);
+      SoundService.playStartSound(sound);
       measureStart = playStartTime.add(Duration(milliseconds: offset));
 
       final waitMs = measureStart.difference(DateTime.now()).inMilliseconds;
@@ -890,33 +892,28 @@ class _MeasureScreenState extends State<MeasureScreen>
         // --- スタート音 ---
         _sectionLabel(l.startSound),
         const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: SoundConfig.all.map((sound) {
-            return SelectPill(
-              label: Labels.startSound(l, sound.key),
-              selected: _selectedSound.key == sound.key,
-              onTap: () => setState(() => _selectedSound = sound),
-            );
-          }).toList(),
+        SegmentedPills(
+          options: SoundConfig.all
+              .map((sound) =>
+                  SegmentOption(sound.key, Labels.startSound(l, sound.key)))
+              .toList(),
+          selectedKey: _selectedSound.key,
+          onChanged: (key) =>
+              setState(() => _selectedSound = SoundConfig.byKey(key)),
         ),
         const SizedBox(height: 12),
 
         // --- 計測中BGM（走行の疾走感演出） ---
         _sectionLabel(l.runBgm),
         const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: MeasureBgmConfig.all.map((bgm) {
-            return SelectPill(
-              label: Labels.measureBgm(l, bgm.key),
-              compact: true,
-              selected: _selectedBgm.key == bgm.key,
-              onTap: () => setState(() => _selectedBgm = bgm),
-            );
-          }).toList(),
+        SegmentedPills(
+          compact: true,
+          options: MeasureBgmConfig.all
+              .map((bgm) => SegmentOption(bgm.key, Labels.measureBgm(l, bgm.key)))
+              .toList(),
+          selectedKey: _selectedBgm.key,
+          onChanged: (key) => setState(() => _selectedBgm =
+              MeasureBgmConfig.all.firstWhere((b) => b.key == key)),
         ),
         const SizedBox(height: 8),
         const Divider(height: 1),
@@ -1033,7 +1030,11 @@ class _MeasureScreenState extends State<MeasureScreen>
           ),
 
         // --- カウントダウン中: GO!までの進み具合バー + 中止 ---
+        // （BMXはいつ鳴るか分からないのが練習なので、進み具合バーは出さない）
         if (_state == TimerState.countdown) ...[
+          if (_selectedSound.key == SoundConfig.bmx.key)
+            const SizedBox(height: 8)
+          else
           AnimatedBuilder(
             animation: _readyController,
             builder: (context, _) => ClipRRect(

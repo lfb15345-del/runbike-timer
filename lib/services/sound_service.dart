@@ -25,12 +25,12 @@ class SoundService {
   /// 全スタート音をプリロード（アプリ起動時・画面表示時に呼ぶ）
   static Future<void> preloadStartSounds() async {
     if (kIsWeb) {
-      for (final sound in SoundConfig.all) {
+      for (final sound in SoundConfig.allFiles) {
         final filename = sound.webFilename;
         if (filename != null) WebAudioService.preloadSound(filename);
       }
     } else {
-      for (final sound in SoundConfig.all) {
+      for (final sound in SoundConfig.allFiles) {
         final path = sound.assetPath;
         if (path != null) {
           try {

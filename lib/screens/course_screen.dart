@@ -3,6 +3,7 @@ import '../services/database_service.dart';
 import '../theme.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/labels.dart';
+import '../widgets/select_pill.dart';
 
 /// コース設定タブ
 class CourseScreen extends StatefulWidget {
@@ -190,30 +191,26 @@ class _CourseScreenState extends State<CourseScreen> {
               // 路面
               Text(l.surfaceLabel, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: _surfaces.map((s) {
-                  return ChoiceChip(
-                    label: Text(Labels.surface(l, s)),
-                    selected: _surface == s,
-                    onSelected: (_) => setState(() => _surface = s),
-                  );
-                }).toList(),
+              SegmentedPills(
+                compact: true,
+                options: _surfaces
+                    .map((s) => SegmentOption(s, Labels.surface(l, s)))
+                    .toList(),
+                selectedKey: _surface,
+                onChanged: (s) => setState(() => _surface = s),
               ),
               const SizedBox(height: 16),
 
               // 天気
               Text(l.weatherLabel, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: _weathers.map((w) {
-                  return ChoiceChip(
-                    label: Text(Labels.weather(l, w)),
-                    selected: _weather == w,
-                    onSelected: (_) => setState(() => _weather = w),
-                  );
-                }).toList(),
+              SegmentedPills(
+                compact: true,
+                options: _weathers
+                    .map((w) => SegmentOption(w, Labels.weather(l, w)))
+                    .toList(),
+                selectedKey: _weather,
+                onChanged: (w) => setState(() => _weather = w),
               ),
               const SizedBox(height: 16),
 

@@ -671,14 +671,16 @@ class _PracticeScreenState extends State<PracticeScreen>
                         fontWeight: FontWeight.bold,
                         color: AppTheme.muted)),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _bgmPill(l.bgmOff, 'none', Icons.volume_off),
-                    _bgmPill(l.bgmMetronome, 'metronome', Icons.music_note),
-                    _bgmPill(l.bgmUpbeat, 'upbeat', Icons.audiotrack),
+                SegmentedPills(
+                  options: [
+                    SegmentOption('none', l.bgmOff, icon: Icons.volume_off),
+                    SegmentOption('metronome', l.bgmMetronome,
+                        icon: Icons.music_note),
+                    SegmentOption('upbeat', l.bgmUpbeat,
+                        icon: Icons.audiotrack),
                   ],
+                  selectedKey: _bgmType,
+                  onChanged: (key) => setState(() => _bgmType = key),
                 ),
                 // メトロノームBPMスライダー
                 if (_bgmType == 'metronome')
@@ -828,15 +830,6 @@ class _PracticeScreenState extends State<PracticeScreen>
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: Row(children: segments),
-    );
-  }
-
-  Widget _bgmPill(String label, String type, IconData icon) {
-    return SelectPill(
-      label: label,
-      icon: icon,
-      selected: _bgmType == type,
-      onTap: () => setState(() => _bgmType = type),
     );
   }
 

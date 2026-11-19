@@ -56,3 +56,5 @@ check.bat
 publish.bat
 publish_result.txt
 commit_msg.txt
+make_bmx_voice.bat
+make_bmx_voice.ps1

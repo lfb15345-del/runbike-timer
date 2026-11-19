@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// スタート音の定義（1音 = ファイル + オフセット + 表示名）
 /// これまで計測画面と練習画面に別々に書かれていた定義をここに一元化
 class StartSound {
@@ -44,8 +46,42 @@ class SoundConfig {
     offsetMs: 20050,
   );
 
+  /// BMX式ランダムスタート（UCIルールのゲート合図: ピッ・ピッ・ピッ・ピーー）
+  /// 画面では1つのボタン。実際に鳴らす音は、待ち時間の違う6種類から毎回ランダムに選ぶ
+  /// （ここの assetPath / offsetMs は代表値。鳴らすときは forPlay() で選び直す）
+  static const bmx = StartSound(
+    key: 'bmx',
+    label: 'BMX',
+    assetPath: 'sounds/bmx_1.wav',
+    offsetMs: 1960,
+  );
+
+  /// BMXの音の種類（ファイル名と、再生開始から「ピーー」が鳴り始めるまでの時間）
+  /// 待ち時間: 1.5秒 + ランダム0.1〜2.7秒（UCIルール）→ ピッ(0) ピッ(120) ピッ(240) ピーー(360ms〜2.25秒)
+  static const bmxVariants = [
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_1.wav', offsetMs: 1960),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_2.wav', offsetMs: 2460),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_3.wav', offsetMs: 2960),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_4.wav', offsetMs: 3460),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_5.wav', offsetMs: 4060),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_6.wav', offsetMs: 4560),
+  ];
+
+  static final Random _random = Random();
+
+  /// 実際に鳴らす音を決める（BMXのときだけ、毎回ランダムに1つ選ぶ）
+  static StartSound forPlay(StartSound sound) => sound.key == bmx.key
+      ? bmxVariants[_random.nextInt(bmxVariants.length)]
+      : sound;
+
   /// 画面に並べる順
-  static const all = [silent, basic, finalRace, semiFinal];
+  static const all = [silent, basic, finalRace, semiFinal, bmx];
+
+  /// 先読みしておく音（BMXの全種類を含む）
+  static List<StartSound> get allFiles => [
+        ...all.where((s) => s.key != bmx.key),
+        ...bmxVariants,
+      ];
 
   /// key から StartSound を引く（見つからなければ基本音）
   static StartSound byKey(String key) =>
