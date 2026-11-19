@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../theme.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/labels.dart';
 
 /// コース設定タブ
 class CourseScreen extends StatefulWidget {
@@ -24,6 +26,9 @@ class _CourseScreenState extends State<CourseScreen> {
   final _weathers = ['晴れ', 'くもり', '雨', '風あり'];
 
   bool _saved = false;
+
+  /// 画面の文字（端末の言語に合わせた翻訳）
+  AppLocalizations get l => AppLocalizations.of(context);
 
   // 過去に保存したコースの一覧（新しい日付順）
   List<Map<String, dynamic>> _pastCourses = [];
@@ -86,7 +91,9 @@ class _CourseScreenState extends State<CourseScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('コース情報を保存しました'), duration: Duration(seconds: 2)),
+        SnackBar(
+            content: Text(l.courseSaved),
+            duration: const Duration(seconds: 2)),
       );
     }
   }
@@ -102,32 +109,33 @@ class _CourseScreenState extends State<CourseScreen> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'コース設定',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  Text(
+                    l.courseTitle,
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   if (_saved)
-                    const Chip(
-                      label: Text('保存済み'),
+                    Chip(
+                      label: Text(l.savedChip),
                       backgroundColor: AppTheme.volt,
-                      labelStyle: TextStyle(
+                      labelStyle: const TextStyle(
                           color: AppTheme.ink, fontWeight: FontWeight.bold),
                     ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text('今日の練習コースの情報を入力できます（任意）',
-                  style: TextStyle(color: Colors.grey)),
+              Text(l.courseIntro,
+                  style: const TextStyle(color: Colors.grey)),
               const SizedBox(height: 24),
 
               // コース名
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'コース名',
-                  hintText: '例: いつもの公園コース',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.courseName,
+                  hintText: l.courseNameHint,
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -136,10 +144,10 @@ class _CourseScreenState extends State<CourseScreen> {
               TextField(
                 controller: _lengthController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'コース全長（m）',
-                  hintText: '例: 30',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.courseLength,
+                  hintText: l.exampleNumber(30),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -148,10 +156,10 @@ class _CourseScreenState extends State<CourseScreen> {
               TextField(
                 controller: _straightController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: '初回直線の長さ（m）',
-                  hintText: '例: 10',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.firstStraight,
+                  hintText: l.exampleNumber(10),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -159,7 +167,7 @@ class _CourseScreenState extends State<CourseScreen> {
               // カーブ数
               Row(
                 children: [
-                  const Text('カーブ数:', style: TextStyle(fontSize: 16)),
+                  Text(l.curvesLabel, style: const TextStyle(fontSize: 16)),
                   const SizedBox(width: 16),
                   IconButton(
                     onPressed: _curveCount > 0
@@ -180,13 +188,13 @@ class _CourseScreenState extends State<CourseScreen> {
               const SizedBox(height: 16),
 
               // 路面
-              const Text('路面:', style: TextStyle(fontSize: 16)),
+              Text(l.surfaceLabel, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: _surfaces.map((s) {
                   return ChoiceChip(
-                    label: Text(s),
+                    label: Text(Labels.surface(l, s)),
                     selected: _surface == s,
                     onSelected: (_) => setState(() => _surface = s),
                   );
@@ -195,13 +203,13 @@ class _CourseScreenState extends State<CourseScreen> {
               const SizedBox(height: 16),
 
               // 天気
-              const Text('天気:', style: TextStyle(fontSize: 16)),
+              Text(l.weatherLabel, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: _weathers.map((w) {
                   return ChoiceChip(
-                    label: Text(w),
+                    label: Text(Labels.weather(l, w)),
                     selected: _weather == w,
                     onSelected: (_) => setState(() => _weather = w),
                   );
@@ -213,10 +221,10 @@ class _CourseScreenState extends State<CourseScreen> {
               TextField(
                 controller: _noteController,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'メモ',
-                  hintText: '自由にメモを書けます',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.memo,
+                  hintText: l.memoHint,
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 24),
@@ -229,7 +237,7 @@ class _CourseScreenState extends State<CourseScreen> {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text('保存する', style: TextStyle(fontSize: 18)),
+                  child: Text(l.saveCourse, style: const TextStyle(fontSize: 18)),
                 ),
               ),
               const SizedBox(height: 32),
@@ -238,13 +246,14 @@ class _CourseScreenState extends State<CourseScreen> {
               if (_pastCourses.isNotEmpty) ...[
                 const Divider(),
                 const SizedBox(height: 8),
-                const Text(
-                  '過去のコース',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  l.pastCourses,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                const Text('保存したコース情報を日付ごとに見直せます',
-                    style: TextStyle(color: Colors.grey)),
+                Text(l.pastCoursesNote,
+                    style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 12),
                 ..._pastCourses.map(_buildCourseCard),
               ],
@@ -263,13 +272,21 @@ class _CourseScreenState extends State<CourseScreen> {
 
     // 「30m・直線10m・カーブ2」のような要約行を組み立てる
     final details = <String>[];
-    if (course['length_m'] != null) details.add('全長${_trimZero(course['length_m'])}m');
-    if (course['first_straight_m'] != null) {
-      details.add('直線${_trimZero(course['first_straight_m'])}m');
+    if (course['length_m'] != null) {
+      details.add(l.courseLengthShort(_trimZero(course['length_m'])));
     }
-    if ((course['curve_count'] ?? 0) > 0) details.add('カーブ${course['curve_count']}');
-    if (course['surface'] != null) details.add('${course['surface']}');
-    if (course['weather'] != null) details.add('${course['weather']}');
+    if (course['first_straight_m'] != null) {
+      details.add(l.courseStraightShort(_trimZero(course['first_straight_m'])));
+    }
+    if ((course['curve_count'] ?? 0) > 0) {
+      details.add(l.courseCurvesShort(course['curve_count'] as int));
+    }
+    if (course['surface'] != null) {
+      details.add(Labels.surface(l, '${course['surface']}'));
+    }
+    if (course['weather'] != null) {
+      details.add(Labels.weather(l, '${course['weather']}'));
+    }
 
     final note = course['note'] as String?;
 
@@ -288,10 +305,11 @@ class _CourseScreenState extends State<CourseScreen> {
                       fontWeight: FontWeight.bold, color: Colors.grey),
                 ),
                 if (isToday)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
                     child: Chip(
-                      label: Text('今日', style: TextStyle(fontSize: 12)),
+                      label: Text(l.todayChip,
+                          style: const TextStyle(fontSize: 12)),
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
@@ -301,7 +319,7 @@ class _CourseScreenState extends State<CourseScreen> {
             Text(
               (course['name'] as String?)?.isNotEmpty == true
                   ? course['name']
-                  : '（名前なし）',
+                  : l.noName,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             if (details.isNotEmpty) ...[
@@ -311,7 +329,7 @@ class _CourseScreenState extends State<CourseScreen> {
             ],
             if (note != null && note.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text('メモ: $note',
+              Text(l.memoValue(note),
                   style: const TextStyle(fontSize: 13, color: Colors.grey)),
             ],
           ],

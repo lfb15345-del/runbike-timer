@@ -1,0 +1,6 @@
+/* アプリ名と、カメラ・マイク・写真の許可をお願いするときの文（th） */
+"CFBundleDisplayName" = "Runbike Timer";
+"NSCameraUsageDescription" = "ใช้กล้องเพื่อบันทึกวิดีโอขณะปั่น";
+"NSMicrophoneUsageDescription" = "ใช้ไมโครโฟนเพื่อบันทึกเสียงรอบข้างขณะถ่ายวิดีโอ";
+"NSPhotoLibraryAddUsageDescription" = "บันทึกวิดีโอที่ถ่ายไว้ลงในคลังรูปภาพ";
+"NSPhotoLibraryUsageDescription" = "ต้องเข้าถึงคลังรูปภาพเพื่อบันทึกวิดีโอที่ถ่ายไว้";

@@ -1,0 +1,6 @@
+/* アプリ名と、カメラ・マイク・写真の許可をお願いするときの文（zh-Hant） */
+"CFBundleDisplayName" = "滑步車計時器";
+"NSCameraUsageDescription" = "使用相機錄下騎乘的影片。";
+"NSMicrophoneUsageDescription" = "錄影時使用麥克風錄下周圍的聲音。";
+"NSPhotoLibraryAddUsageDescription" = "將錄下的影片儲存到照片圖庫。";
+"NSPhotoLibraryUsageDescription" = "需要存取照片圖庫以儲存錄下的影片。";

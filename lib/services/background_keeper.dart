@@ -36,12 +36,14 @@ class BackgroundKeeper {
   }
 
   /// 計測・練習のスタート時に呼ぶ
-  static Future<void> start() async {
+  /// [title] [text] は Android の通知に出す文字（端末の言語に翻訳済みのもの）
+  static Future<void> start(String title, String text) async {
     if (kIsWeb || _active) return;
     _active = true;
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
-        await _channel.invokeMethod<void>('start');
+        await _channel.invokeMethod<void>(
+            'start', <String, String>{'title': title, 'text': text});
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         final player = _silentPlayer ??= AudioPlayer();
         await player.setReleaseMode(ReleaseMode.loop);

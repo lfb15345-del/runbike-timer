@@ -1,0 +1,422 @@
+{
+  "@@locale": "ja",
+  "appTitle": "ランバイクタイマー",
+  "@appTitle": {},
+  "audioPreparing": "音声を準備中...",
+  "@audioPreparing": {},
+  "tapToStart": "タップして開始",
+  "@tapToStart": {},
+  "tapRequiredNote": "音を鳴らすために、最初に1回タップが必要です",
+  "@tapRequiredNote": {},
+  "cannotSwitchTabWhileRecording": "録画中はタブを切り替えられません",
+  "@cannotSwitchTabWhileRecording": {},
+  "tabMeasure": "計測",
+  "@tabMeasure": {},
+  "tabPractice": "練習",
+  "@tabPractice": {},
+  "tabAnalysis": "解析・共有",
+  "@tabAnalysis": {},
+  "tabCourse": "コース設定",
+  "@tabCourse": {},
+  "tabWhistle": "ホイッスル",
+  "@tabWhistle": {},
+  "cancel": "キャンセル",
+  "@cancel": {},
+  "delete": "削除",
+  "@delete": {},
+  "save": "保存",
+  "@save": {},
+  "timeSec": "{time} 秒",
+  "@timeSec": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "timeSecShort": "{time}秒",
+  "@timeSecShort": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notSelected": "未選択",
+  "@notSelected": {},
+  "videoSavedToPhotos": "動画を写真アプリに保存しました（アルバム「{album}」）",
+  "@videoSavedToPhotos": {
+    "placeholders": {
+      "album": {
+        "type": "String"
+      }
+    }
+  },
+  "videoSavedInApp": "写真アプリに保存できなかったため、アプリ内に退避しました",
+  "@videoSavedInApp": {},
+  "videoSaveFailed": "動画の保存に失敗しました",
+  "@videoSaveFailed": {},
+  "cameraStartFailed": "カメラを起動できませんでした",
+  "@cameraStartFailed": {},
+  "photoAccessDenied": "写真へのアクセスが許可されていないため、写真アプリに保存できませんでした。\n設定 → {app} → 写真 を「フルアクセス」にしてください",
+  "@photoAccessDenied": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "practiceRunningStopFirst": "練習タブが実行中です。練習を止めてからスタートしてください",
+  "@practiceRunningStopFirst": {},
+  "cancelled": "中止しました",
+  "@cancelled": {},
+  "viewRecording": "録画を確認",
+  "@viewRecording": {},
+  "registerChildFirst": "先に子どもを登録してください",
+  "@registerChildFirst": {},
+  "personalBest": "{time} 秒　自己ベスト更新！",
+  "@personalBest": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "recordSaved": "{time} 秒 を記録しました！",
+  "@recordSaved": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseChild": "子どもを選ぶ",
+  "@chooseChild": {},
+  "rename": "名前を変更",
+  "@rename": {},
+  "addNewChild": "新しい子どもを追加",
+  "@addNewChild": {},
+  "change": "変更",
+  "@change": {},
+  "deleteConfirmTitle": "削除の確認",
+  "@deleteConfirmTitle": {},
+  "deleteChildMessage": "{name} を削除しますか？\n記録データも見られなくなります。",
+  "@deleteChildMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "enterChildName": "子どもの名前を入力",
+  "@enterChildName": {},
+  "childNameHint": "例: ゆうた",
+  "@childNameHint": {},
+  "add": "追加",
+  "@add": {},
+  "modeSolo": "個人",
+  "@modeSolo": {},
+  "modeTeam": "チーム",
+  "@modeTeam": {},
+  "startSound": "スタート音",
+  "@startSound": {},
+  "runBgm": "走行中BGM",
+  "@runBgm": {},
+  "recordVideo": "録画",
+  "@recordVideo": {},
+  "recordingNow": "録画中",
+  "@recordingNow": {},
+  "abort": "中止",
+  "@abort": {},
+  "goal": "ゴール！",
+  "@goal": {},
+  "teamPlace": "{rank}着 {time}秒",
+  "@teamPlace": {
+    "placeholders": {
+      "rank": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "nextRace": "次のレースへ",
+  "@nextRace": {},
+  "btOffset": "BT補正",
+  "@btOffset": {},
+  "soundSilent": "サイレント",
+  "@soundSilent": {},
+  "soundBasic": "基本",
+  "@soundBasic": {},
+  "soundFinal": "決勝",
+  "@soundFinal": {},
+  "soundSemi": "準決勝",
+  "@soundSemi": {},
+  "bgmNone": "なし",
+  "@bgmNone": {},
+  "bgmSpeed": "スピード",
+  "@bgmSpeed": {},
+  "bgmRock": "ロック",
+  "@bgmRock": {},
+  "bgm8bit": "8ビット",
+  "@bgm8bit": {},
+  "practiceVideosSaved": "走りの動画を{count}本、写真アプリに保存しました（アルバム「{album}」）",
+  "@practiceVideosSaved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "album": {
+        "type": "String"
+      }
+    }
+  },
+  "measureRunningStopFirst": "計測タブが実行中です。計測を終えてからスタートしてください",
+  "@measureRunningStopFirst": {},
+  "intervalPractice": "インターバル練習",
+  "@intervalPractice": {},
+  "total": "合計",
+  "@total": {},
+  "ride": "走る",
+  "@ride": {},
+  "rest": "休む",
+  "@rest": {},
+  "rounds": "回数",
+  "@rounds": {},
+  "unitSec": "秒",
+  "@unitSec": {},
+  "unitTimes": "回",
+  "@unitTimes": {},
+  "bgmOff": "無音",
+  "@bgmOff": {},
+  "bgmMetronome": "メトロノーム",
+  "@bgmMetronome": {},
+  "bgmUpbeat": "アップテンポ",
+  "@bgmUpbeat": {},
+  "recordEachRide": "走るたびに録画",
+  "@recordEachRide": {},
+  "paused": "一時停止中",
+  "@paused": {},
+  "recordingSavedCount": "録画中 ・ 保存 {count}本",
+  "@recordingSavedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "savedCount": "保存 {count}本",
+  "@savedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "captionReady": "スタート音のあとに走り出す",
+  "@captionReady": {},
+  "captionLastOne": "ラスト1本！",
+  "@captionLastOne": {},
+  "captionNext": "つぎは {n}本目",
+  "@captionNext": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "captionFinished": "{total}本 おつかれさま！",
+  "@captionFinished": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "resume": "再開",
+  "@resume": {},
+  "pause": "一時停止",
+  "@pause": {},
+  "speedRecordFor": "{time}秒 のスピード記録",
+  "@speedRecordFor": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "maxSpeedKmh": "最高速度 (km/h)",
+  "@maxSpeedKmh": {},
+  "avgSpeedKmh": "平均速度 (km/h)",
+  "@avgSpeedKmh": {},
+  "shareTitle": "{name} の今日の記録",
+  "@shareTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareLine": "{n}本目: {time}秒",
+  "@shareLine": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "topSpeedValue": "最高 {v}km/h",
+  "@topSpeedValue": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "avgSpeedValue": "平均 {v}km/h",
+  "@avgSpeedValue": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "shareBest": "★ベスト",
+  "@shareBest": {},
+  "resultsCopied": "結果をコピーしました！",
+  "@resultsCopied": {},
+  "selectChild": "子どもを選択:",
+  "@selectChild": {},
+  "todayCount": "今日の本数",
+  "@todayCount": {},
+  "todayBest": "今日のベスト",
+  "@todayBest": {},
+  "allTimeBest": "歴代ベスト",
+  "@allTimeBest": {},
+  "speedRecords": "スピード記録",
+  "@speedRecords": {},
+  "bestTopSpeed": "歴代 最高速度",
+  "@bestTopSpeed": {},
+  "bestAvgSpeed": "歴代 平均速度ベスト",
+  "@bestAvgSpeed": {},
+  "todayRides": "今日の走行一覧",
+  "@todayRides": {},
+  "tapSwipeHint": "タップで速度入力 / スワイプで削除",
+  "@tapSwipeHint": {},
+  "noRidesToday": "まだ今日の記録がありません",
+  "@noRidesToday": {},
+  "deleteRideTitle": "記録を削除",
+  "@deleteRideTitle": {},
+  "deleteRideMessage": "{time}秒 の記録を削除しますか？",
+  "@deleteRideMessage": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "shareToday": "今日の記録をシェア",
+  "@shareToday": {},
+  "registerChildInTimer": "計測タブで子どもを登録してください",
+  "@registerChildInTimer": {},
+  "courseSaved": "コース情報を保存しました",
+  "@courseSaved": {},
+  "courseTitle": "コース設定",
+  "@courseTitle": {},
+  "savedChip": "保存済み",
+  "@savedChip": {},
+  "courseIntro": "今日の練習コースの情報を入力できます（任意）",
+  "@courseIntro": {},
+  "courseName": "コース名",
+  "@courseName": {},
+  "courseNameHint": "例: いつもの公園コース",
+  "@courseNameHint": {},
+  "courseLength": "コース全長（m）",
+  "@courseLength": {},
+  "firstStraight": "初回直線の長さ（m）",
+  "@firstStraight": {},
+  "exampleNumber": "例: {n}",
+  "@exampleNumber": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "curvesLabel": "カーブ数:",
+  "@curvesLabel": {},
+  "surfaceLabel": "路面:",
+  "@surfaceLabel": {},
+  "weatherLabel": "天気:",
+  "@weatherLabel": {},
+  "surfaceAsphalt": "アスファルト",
+  "@surfaceAsphalt": {},
+  "surfaceGrass": "芝生",
+  "@surfaceGrass": {},
+  "surfaceIndoor": "室内",
+  "@surfaceIndoor": {},
+  "surfaceGravel": "砂利",
+  "@surfaceGravel": {},
+  "surfaceOther": "その他",
+  "@surfaceOther": {},
+  "weatherSunny": "晴れ",
+  "@weatherSunny": {},
+  "weatherCloudy": "くもり",
+  "@weatherCloudy": {},
+  "weatherRain": "雨",
+  "@weatherRain": {},
+  "weatherWindy": "風あり",
+  "@weatherWindy": {},
+  "memo": "メモ",
+  "@memo": {},
+  "memoHint": "自由にメモを書けます",
+  "@memoHint": {},
+  "saveCourse": "保存する",
+  "@saveCourse": {},
+  "pastCourses": "過去のコース",
+  "@pastCourses": {},
+  "pastCoursesNote": "保存したコース情報を日付ごとに見直せます",
+  "@pastCoursesNote": {},
+  "todayChip": "今日",
+  "@todayChip": {},
+  "noName": "（名前なし）",
+  "@noName": {},
+  "courseLengthShort": "全長{v}m",
+  "@courseLengthShort": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "courseStraightShort": "直線{v}m",
+  "@courseStraightShort": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "courseCurvesShort": "カーブ{n}",
+  "@courseCurvesShort": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "memoValue": "メモ: {note}",
+  "@memoValue": {
+    "placeholders": {
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "bgNotificationText": "タイマーが動いています（タップで戻る）",
+  "@bgNotificationText": {}
+}

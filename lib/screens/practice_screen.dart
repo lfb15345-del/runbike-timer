@@ -8,12 +8,13 @@ import '../services/sound_service.dart';
 import '../services/app_settings.dart';
 import '../services/background_keeper.dart';
 import '../services/practice_recorder.dart';
-import '../services/video_saver.dart';
 import '../widgets/bt_offset_control.dart';
 import '../widgets/camera_wipe.dart';
 import '../widgets/select_pill.dart';
 import '../widgets/timer_text.dart';
 import '../theme.dart';
+import '../l10n/app_language.dart';
+import '../l10n/app_localizations.dart';
 import 'measure_screen.dart';
 
 /// インターバル練習の状態
@@ -95,6 +96,9 @@ class _PracticeScreenState extends State<PracticeScreen>
   late final AnimationController _readyController;
   DateTime? _countdownStartTime; // カウントダウンを始めた時刻
   int _countdownTotalMs = 0; // GO!までの長さ
+
+  /// 画面の文字（端末の言語に合わせた翻訳）
+  AppLocalizations get l => AppLocalizations.of(context);
 
   @override
   void initState() {
@@ -194,10 +198,10 @@ class _PracticeScreenState extends State<PracticeScreen>
     if (!mounted) return;
     final String? msg;
     if (_recorder.accessDenied) {
-      msg = VideoSaver.deniedMessage;
+      msg = l.photoAccessDenied(l.appTitle);
     } else if (_recorder.savedCount > 0) {
-      msg = '走りの動画を${_recorder.savedCount}本、写真アプリに保存しました'
-          '（アルバム「ランバイクタイマー」）';
+      msg = l.practiceVideosSaved(
+          _recorder.savedCount, AppLanguage.albumName);
     } else {
       msg = null;
     }
@@ -231,9 +235,9 @@ class _PracticeScreenState extends State<PracticeScreen>
     if (_phase != PracticePhase.idle) return;
     // 計測タブが動いている間は始めない（音が重なって両方おかしくなるため）
     if (MeasureScreen.isRunning) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('計測タブが実行中です。計測を終えてからスタートしてください'),
-        duration: Duration(seconds: 2),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l.measureRunningStopFirst),
+        duration: const Duration(seconds: 2),
       ));
       return;
     }
@@ -253,7 +257,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     });
     if (_isRecordingEnabled) _recorder.resetCount();
     // 別のアプリを開いても止まらないようにする
-    BackgroundKeeper.start();
+    BackgroundKeeper.start(l.appTitle, l.bgNotificationText);
 
     // READYの進み具合バーを、GO!までの時間ぴったりで動かす
     _countdownStartTime = DateTime.now();
@@ -594,8 +598,8 @@ class _PracticeScreenState extends State<PracticeScreen>
                               style: AppTheme.labelStyle(
                                   fontSize: 14, color: AppTheme.muted)),
                           const SizedBox(height: 4),
-                          const Text('インターバル練習',
-                              style: TextStyle(
+                          Text(l.intervalPractice,
+                              style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w900,
                                   height: 1.2)),
@@ -605,8 +609,8 @@ class _PracticeScreenState extends State<PracticeScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('合計',
-                            style: TextStyle(
+                        Text(l.total,
+                            style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.muted)),
@@ -629,7 +633,7 @@ class _PracticeScreenState extends State<PracticeScreen>
                   child: Row(
                     children: [
                       Expanded(
-                        child: _stepper('走る', _sprintSec, '秒', onMinus: () {
+                        child: _stepper(l.ride, _sprintSec, l.unitSec, onMinus: () {
                           if (_sprintSec > 5) setState(() => _sprintSec -= 5);
                         }, onPlus: () {
                           if (_sprintSec < 60) setState(() => _sprintSec += 5);
@@ -637,7 +641,7 @@ class _PracticeScreenState extends State<PracticeScreen>
                       ),
                       Container(width: 1, height: 72, color: AppTheme.line),
                       Expanded(
-                        child: _stepper('休む', _restSec, '秒', onMinus: () {
+                        child: _stepper(l.rest, _restSec, l.unitSec, onMinus: () {
                           if (_restSec > 5) setState(() => _restSec -= 5);
                         }, onPlus: () {
                           if (_restSec < 120) setState(() => _restSec += 5);
@@ -645,7 +649,7 @@ class _PracticeScreenState extends State<PracticeScreen>
                       ),
                       Container(width: 1, height: 72, color: AppTheme.line),
                       Expanded(
-                        child: _stepper('回数', _totalRounds, '回', onMinus: () {
+                        child: _stepper(l.rounds, _totalRounds, l.unitTimes, onMinus: () {
                           if (_totalRounds > 1) setState(() => _totalRounds--);
                         }, onPlus: () {
                           if (_totalRounds < 20) setState(() => _totalRounds++);
@@ -661,8 +665,8 @@ class _PracticeScreenState extends State<PracticeScreen>
                 const SizedBox(height: 20),
 
                 // BGM設定
-                const Text('走行中BGM',
-                    style: TextStyle(
+                Text(l.runBgm,
+                    style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.muted)),
@@ -671,9 +675,9 @@ class _PracticeScreenState extends State<PracticeScreen>
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _bgmPill('無音', 'none', Icons.volume_off),
-                    _bgmPill('メトロノーム', 'metronome', Icons.music_note),
-                    _bgmPill('アップテンポ', 'upbeat', Icons.audiotrack),
+                    _bgmPill(l.bgmOff, 'none', Icons.volume_off),
+                    _bgmPill(l.bgmMetronome, 'metronome', Icons.music_note),
+                    _bgmPill(l.bgmUpbeat, 'upbeat', Icons.audiotrack),
                   ],
                 ),
                 // メトロノームBPMスライダー
@@ -711,9 +715,9 @@ class _PracticeScreenState extends State<PracticeScreen>
                     children: [
                       const Icon(Icons.videocam, size: 20),
                       const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text('走るたびに録画',
-                            style: TextStyle(
+                      Expanded(
+                        child: Text(l.recordEachRide,
+                            style: const TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.w600)),
                       ),
                       Switch(
@@ -875,7 +879,7 @@ class _PracticeScreenState extends State<PracticeScreen>
                     color: fg,
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: Text('一時停止中',
+                  child: Text(l.paused,
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -895,8 +899,8 @@ class _PracticeScreenState extends State<PracticeScreen>
                     const SizedBox(width: 4),
                     Text(
                       _recorder.isRecording
-                          ? '録画中 ・ 保存 ${_recorder.savedCount}本'
-                          : '保存 ${_recorder.savedCount}本',
+                          ? l.recordingSavedCount(_recorder.savedCount)
+                          : l.savedCount(_recorder.savedCount),
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -939,16 +943,16 @@ class _PracticeScreenState extends State<PracticeScreen>
     String caption = '';
     if (_phase == PracticePhase.countdown) {
       word = 'READY';
-      caption = 'スタート音のあとに走り出す';
+      caption = l.captionReady;
     } else if (_phase == PracticePhase.sprint) {
       word = 'GO';
-      caption = _currentRound >= _totalRounds ? 'ラスト1本！' : '走る';
+      caption = _currentRound >= _totalRounds ? l.captionLastOne : l.ride;
     } else if (_phase == PracticePhase.rest) {
       word = 'REST';
-      caption = 'つぎは ${_currentRound + 1}本目';
+      caption = l.captionNext(_currentRound + 1);
     } else if (_phase == PracticePhase.finished) {
       word = 'FINISH';
-      caption = '$_totalRounds本 おつかれさま！';
+      caption = l.captionFinished(_totalRounds);
     }
 
     final showDigits =
@@ -1070,7 +1074,7 @@ class _PracticeScreenState extends State<PracticeScreen>
           Expanded(
             flex: 3,
             child: _bigButton(
-              label: _isPaused ? '再開' : '一時停止',
+              label: _isPaused ? l.resume : l.pause,
               icon: _isPaused ? Icons.play_arrow : Icons.pause,
               latin: false,
               background: fg,

@@ -15,6 +15,9 @@ import '../widgets/camera_wipe.dart';
 import '../widgets/select_pill.dart';
 import '../widgets/timer_text.dart';
 import '../theme.dart';
+import '../l10n/app_language.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/labels.dart';
 import 'practice_screen.dart';
 
 /// タイマーの状態
@@ -41,7 +44,7 @@ class _MeasureScreenState extends State<MeasureScreen>
 
   // 現在の練習対象の子ども
   int? _currentChildId;
-  String _currentChildName = '未選択';
+  String _currentChildName = ''; // 空 = まだ選ばれていない
   List<Map<String, dynamic>> _children = [];
 
   // 選択中のスタート音（定義は SoundConfig に一元化）
@@ -77,6 +80,13 @@ class _MeasureScreenState extends State<MeasureScreen>
   late final AnimationController _readyController;
   DateTime? _countdownStartTime; // カウントダウンを始めた時刻
   int _countdownTotalMs = 0; // GO!までの長さ
+
+  /// 画面の文字（端末の言語に合わせた翻訳）
+  AppLocalizations get l => AppLocalizations.of(context);
+
+  /// 表示用の子どもの名前（未選択なら「未選択」）
+  String get _childLabel =>
+      _currentChildName.isEmpty ? l.notSelected : _currentChildName;
 
   @override
   void initState() {
@@ -266,16 +276,16 @@ class _MeasureScreenState extends State<MeasureScreen>
       final result = await VideoSaver.save(xFile.path);
       switch (result) {
         case VideoSaveResult.gallery:
-          _showMessage('動画を写真アプリに保存しました（アルバム「ランバイクタイマー」）');
+          _showMessage(l.videoSavedToPhotos(AppLanguage.albumName));
         case VideoSaveResult.denied:
-          _showMessage(VideoSaver.deniedMessage, seconds: 8);
+          _showMessage(l.photoAccessDenied(l.appTitle), seconds: 8);
         case VideoSaveResult.appFolder:
-          _showMessage('写真アプリに保存できなかったため、アプリ内に退避しました', seconds: 5);
+          _showMessage(l.videoSavedInApp, seconds: 5);
       }
     } catch (e) {
       debugPrint('録画停止エラー: $e');
       setState(() => _isVideoRecording = false);
-      _showMessage('動画の保存に失敗しました');
+      _showMessage(l.videoSaveFailed);
     }
   }
 
@@ -288,7 +298,7 @@ class _MeasureScreenState extends State<MeasureScreen>
       if (value) {
         final ok = await WebCameraService.startPreview();
         if (!ok) {
-          _showMessage('カメラを起動できませんでした');
+          _showMessage(l.cameraStartFailed);
           MeasureScreen.isRecordingOn = false;
           setState(() => _isRecordingEnabled = false);
         }
@@ -341,7 +351,7 @@ class _MeasureScreenState extends State<MeasureScreen>
     if (_state != TimerState.waiting) return;
     // 練習タブが動いている間は始めない（音が重なって両方おかしくなるため）
     if (PracticeScreen.isRunning) {
-      _showMessage('練習タブが実行中です。練習を止めてからスタートしてください');
+      _showMessage(l.practiceRunningStopFirst);
       return;
     }
     final generation = ++_startGeneration;
@@ -354,7 +364,7 @@ class _MeasureScreenState extends State<MeasureScreen>
       MeasureScreen.isRunning = true;
     });
     // 別のアプリを開いても止まらないようにする
-    BackgroundKeeper.start();
+    BackgroundKeeper.start(l.appTitle, l.bgNotificationText);
 
     // 録画ONなら録画開始
     if (_isRecordingEnabled) {
@@ -430,10 +440,10 @@ class _MeasureScreenState extends State<MeasureScreen>
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('中止しました'),
+                content: Text(l.cancelled),
                 duration: const Duration(seconds: 10),
                 action: SnackBarAction(
-                  label: '録画を確認',
+                  label: l.viewRecording,
                   textColor: AppTheme.volt,
                   onPressed: () {
                     WebCameraService.showPendingRecording();
@@ -485,7 +495,7 @@ class _MeasureScreenState extends State<MeasureScreen>
     });
 
     if (_currentChildId == null) {
-      _showMessage('先に子どもを登録してください');
+      _showMessage(l.registerChildFirst);
       return;
     }
 
@@ -506,8 +516,8 @@ class _MeasureScreenState extends State<MeasureScreen>
     // 自己ベスト更新（2本目以降で、これまでの最速より速い）
     final isPersonalBest = previousBest != null && finalTime < previousBest;
     final recordMessage = isPersonalBest
-        ? '${_formatTime(finalTime)} 秒　自己ベスト更新！'
-        : '${_formatTime(finalTime)} 秒 を記録しました！';
+        ? l.personalBest(_formatTime(finalTime))
+        : l.recordSaved(_formatTime(finalTime));
     if (isPersonalBest) {
       // 喜んでいる瞬間に、少し間をおいて App Store の評価をお願いする（iPhoneのみ・控えめに）
       Future.delayed(
@@ -524,7 +534,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           content: Text(recordMessage),
           duration: const Duration(seconds: 10),
           action: SnackBarAction(
-            label: '録画を確認',
+            label: l.viewRecording,
             textColor: AppTheme.volt,
             onPressed: () {
               WebCameraService.showPendingRecording();
@@ -580,7 +590,7 @@ class _MeasureScreenState extends State<MeasureScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('子どもを選ぶ'),
+        title: Text(l.chooseChild),
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
@@ -604,11 +614,11 @@ class _MeasureScreenState extends State<MeasureScreen>
                       }
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'edit', child: Text('名前を変更')),
-                      const PopupMenuItem(
+                      PopupMenuItem(value: 'edit', child: Text(l.rename)),
+                      PopupMenuItem(
                           value: 'delete',
-                          child:
-                              Text('削除', style: TextStyle(color: Colors.red))),
+                          child: Text(l.delete,
+                              style: const TextStyle(color: Colors.red))),
                     ],
                   ),
                   onTap: () {
@@ -625,7 +635,7 @@ class _MeasureScreenState extends State<MeasureScreen>
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.add),
-                title: const Text('新しい子どもを追加'),
+                title: Text(l.addNewChild),
                 onTap: () {
                   Navigator.pop(context);
                   _showAddChildDialog();
@@ -644,7 +654,7 @@ class _MeasureScreenState extends State<MeasureScreen>
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('名前を変更'),
+        title: Text(l.rename),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -652,11 +662,11 @@ class _MeasureScreenState extends State<MeasureScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('変更'),
+            child: Text(l.change),
           ),
         ],
       ),
@@ -676,16 +686,16 @@ class _MeasureScreenState extends State<MeasureScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('削除の確認'),
-        content: Text('$childName を削除しますか？\n記録データも見られなくなります。'),
+        title: Text(l.deleteConfirmTitle),
+        content: Text(l.deleteChildMessage(childName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            child: Text(l.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -699,7 +709,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           _currentChildId =
               _children.isNotEmpty ? _children.first['id'] as int : null;
           _currentChildName =
-              _children.isNotEmpty ? _children.first['name'] as String : '未選択';
+              _children.isNotEmpty ? _children.first['name'] as String : '';
         });
       }
     }
@@ -711,20 +721,20 @@ class _MeasureScreenState extends State<MeasureScreen>
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('子どもの名前を入力'),
+        title: Text(l.enterChildName),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: '例: ゆうた'),
+          decoration: InputDecoration(hintText: l.childNameHint),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('追加'),
+            child: Text(l.add),
           ),
         ],
       ),
@@ -823,14 +833,14 @@ class _MeasureScreenState extends State<MeasureScreen>
                     fontSize: 16, color: AppTheme.muted)),
             const Spacer(),
             SelectPill(
-              label: '個人',
+              label: l.modeSolo,
               compact: true,
               selected: !_isTeamMode,
               onTap: () => setState(() => _isTeamMode = false),
             ),
             const SizedBox(width: 6),
             SelectPill(
-              label: 'チーム',
+              label: l.modeTeam,
               compact: true,
               selected: _isTeamMode,
               onTap: () => setState(() => _isTeamMode = true),
@@ -844,7 +854,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           children: [
             Flexible(
               child: Text(
-                _currentChildName,
+                _childLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -858,7 +868,7 @@ class _MeasureScreenState extends State<MeasureScreen>
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
               ),
-              child: const Text('変更'),
+              child: Text(l.change),
             ),
           ],
         ),
@@ -878,14 +888,14 @@ class _MeasureScreenState extends State<MeasureScreen>
         ),
 
         // --- スタート音 ---
-        _sectionLabel('スタート音'),
+        _sectionLabel(l.startSound),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: SoundConfig.all.map((sound) {
             return SelectPill(
-              label: sound.label,
+              label: Labels.startSound(l, sound.key),
               selected: _selectedSound.key == sound.key,
               onTap: () => setState(() => _selectedSound = sound),
             );
@@ -894,14 +904,14 @@ class _MeasureScreenState extends State<MeasureScreen>
         const SizedBox(height: 12),
 
         // --- 計測中BGM（走行の疾走感演出） ---
-        _sectionLabel('走行中BGM'),
+        _sectionLabel(l.runBgm),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: MeasureBgmConfig.all.map((bgm) {
             return SelectPill(
-              label: bgm.label,
+              label: Labels.measureBgm(l, bgm.key),
               compact: true,
               selected: _selectedBgm.key == bgm.key,
               onTap: () => setState(() => _selectedBgm = bgm),
@@ -916,9 +926,10 @@ class _MeasureScreenState extends State<MeasureScreen>
           children: [
             const Icon(Icons.videocam, size: 20),
             const SizedBox(width: 8),
-            const Expanded(
-              child: Text('録画',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            Expanded(
+              child: Text(l.recordVideo,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600)),
             ),
             Switch(
               value: _isRecordingEnabled,
@@ -988,7 +999,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           children: [
             Flexible(
               child: Text(
-                _isTeamMode ? 'チーム' : _currentChildName,
+                _isTeamMode ? l.modeTeam : _childLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -1003,7 +1014,7 @@ class _MeasureScreenState extends State<MeasureScreen>
                   const Icon(Icons.fiber_manual_record,
                       size: 16, color: AppTheme.recordRed),
                   const SizedBox(width: 4),
-                  Text('録画中',
+                  Text(l.recordingNow,
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -1041,7 +1052,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           ),
           const SizedBox(height: 16),
           _bigButton(
-            label: '中止',
+            label: l.abort,
             background: Colors.transparent,
             foreground: fg,
             borderColor: fg,
@@ -1052,7 +1063,7 @@ class _MeasureScreenState extends State<MeasureScreen>
         // --- 計測中（個人）: ゴールボタン ---
         if (isMeasuring && !_isTeamMode)
           _bigButton(
-            label: 'ゴール！',
+            label: l.goal,
             height: 104,
             fontSize: 34,
             background: AppTheme.ink,
@@ -1112,7 +1123,7 @@ class _MeasureScreenState extends State<MeasureScreen>
                       ),
                       if (isFinished)
                         Text(
-                          '$rank着 ${_formatTime(finishTime!)}秒',
+                          l.teamPlace(rank, _formatTime(finishTime!)),
                           style: const TextStyle(fontSize: 14),
                         ),
                     ],
@@ -1123,7 +1134,7 @@ class _MeasureScreenState extends State<MeasureScreen>
           ),
           const SizedBox(height: 8),
           _bigButton(
-            label: '次のレースへ',
+            label: l.nextRace,
             height: 54,
             background: Colors.transparent,
             foreground: fg,

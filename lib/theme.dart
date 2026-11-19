@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'l10n/app_language.dart';
 
 /// アプリ全体のテーマ定義
 /// 色・角丸・ボタン・文字のスタイルはすべてここに集約する。
@@ -35,6 +36,21 @@ class AppTheme {
   static const Color goRed = Color(0xFFE5342A);
   static const Color recordRed = goRed;
 
+  /// 本文のフォント: 日本語のときは Noto Sans JP、ほかの言語は端末の標準フォント
+  /// （タイ語・韓国語・繁体字が、その国の人に見慣れた字形で出るように）
+  static String? get bodyFont =>
+      bodyFontOverride ?? (AppLanguage.isJapanese ? 'Noto Sans JP' : null);
+
+  /// スクリーンショット撮影（テスト）用: 本文フォントを差し替える
+  static String? bodyFontOverride;
+  static List<String>? bodyFallbackOverride;
+
+  /// 英字用フォントに無い文字（日本語など）を描くときの代わりのフォント
+  static List<String> get _displayFallback => [
+        ?bodyFontOverride,
+        'Noto Sans JP',
+      ];
+
   /// 数字・英字見出し用フォント
   static const String displayFont = 'Barlow Condensed';
 
@@ -57,7 +73,8 @@ class AppTheme {
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      fontFamily: 'Noto Sans JP',
+      fontFamily: bodyFont,
+      fontFamilyFallback: bodyFallbackOverride,
       scaffoldBackgroundColor: paper,
 
       // メインボタン: 墨色ベタ・影なし
@@ -71,9 +88,9 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          textStyle: const TextStyle(
+          textStyle: TextStyle(
             fontWeight: FontWeight.bold,
-            fontFamily: 'Noto Sans JP',
+            fontFamily: bodyFont,
           ),
         ),
       ),
@@ -86,9 +103,9 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
+          textStyle: TextStyle(
             fontWeight: FontWeight.bold,
-            fontFamily: 'Noto Sans JP',
+            fontFamily: bodyFont,
           ),
         ),
       ),
@@ -99,9 +116,9 @@ class AppTheme {
         selectedColor: volt,
         checkmarkColor: ink,
         side: const BorderSide(color: line),
-        labelStyle: const TextStyle(color: ink, fontFamily: 'Noto Sans JP'),
+        labelStyle: TextStyle(color: ink, fontFamily: bodyFont),
         secondaryLabelStyle:
-            const TextStyle(color: ink, fontFamily: 'Noto Sans JP'),
+            TextStyle(color: ink, fontFamily: bodyFont),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
         ),
@@ -132,9 +149,9 @@ class AppTheme {
       // お知らせバー（「記録しました」など）
       snackBarTheme: SnackBarThemeData(
         backgroundColor: ink,
-        contentTextStyle: const TextStyle(
+        contentTextStyle: TextStyle(
           color: Colors.white,
-          fontFamily: 'Noto Sans JP',
+          fontFamily: bodyFont,
           fontSize: 14,
         ),
         actionTextColor: volt,
@@ -176,7 +193,7 @@ class AppTheme {
       fontWeight: FontWeight.w700,
       fontStyle: FontStyle.italic,
       fontFamily: displayFont,
-      fontFamilyFallback: const ['Noto Sans JP'],
+      fontFamilyFallback: _displayFallback,
       fontFeatures: const [FontFeature.tabularFigures()],
       height: 1.0,
       color: color,
@@ -194,7 +211,7 @@ class AppTheme {
       fontWeight: FontWeight.w800,
       fontStyle: FontStyle.italic,
       fontFamily: displayFont,
-      fontFamilyFallback: const ['Noto Sans JP'],
+      fontFamilyFallback: _displayFallback,
       height: 1.0,
       color: color,
       letterSpacing: letterSpacing,
@@ -210,7 +227,7 @@ class AppTheme {
       fontSize: fontSize,
       fontWeight: FontWeight.w600,
       fontFamily: displayFont,
-      fontFamilyFallback: const ['Noto Sans JP'],
+      fontFamilyFallback: _displayFallback,
       height: 1.0,
       color: color,
       letterSpacing: 1.5,

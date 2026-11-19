@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ホーム画面に出るアプリ名 -->
+    <string name="app_name">ランバイクタイマー</string>
+</resources>

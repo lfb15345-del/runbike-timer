@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:runbike_app/l10n/app_localizations.dart';
 import 'package:runbike_app/main.dart';
 import 'package:runbike_app/theme.dart';
 
@@ -10,6 +11,9 @@ void main() {
   testWidgets('起動画面（音声解禁画面）が表示される', (WidgetTester tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
+      locale: const Locale('ja'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: const WebAudioUnlockScreen(),
     ));
 

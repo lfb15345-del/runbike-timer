@@ -17,6 +17,9 @@ class MainActivity : FlutterActivity() {
                     "start" -> {
                         try {
                             val intent = Intent(this, TimerKeepAliveService::class.java)
+                            // 通知に出す文字（アプリ側で各言語に翻訳済み）
+                            intent.putExtra(TimerKeepAliveService.EXTRA_TITLE, call.argument<String>("title"))
+                            intent.putExtra(TimerKeepAliveService.EXTRA_TEXT, call.argument<String>("text"))
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 startForegroundService(intent)
                             } else {

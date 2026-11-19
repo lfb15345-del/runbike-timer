@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/database_service.dart';
 import '../theme.dart';
+import '../l10n/app_localizations.dart';
 
 /// 解析・共有タブ
 class AnalysisScreen extends StatefulWidget {
@@ -26,6 +27,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   int? _allTimeBest;
   double? _bestMaxSpeed;
   double? _bestAvgSpeed;
+
+  /// 画面の文字（端末の言語に合わせた翻訳）
+  AppLocalizations get l => AppLocalizations.of(context);
 
   @override
   void initState() {
@@ -130,7 +134,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '${_formatTime(timeMs)}秒 のスピード記録',
+              l.speedRecordFor(_formatTime(timeMs)),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -140,10 +144,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   child: TextField(
                     controller: maxController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: '最高速度 (km/h)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.speed, color: AppTheme.ink),
+                    decoration: InputDecoration(
+                      labelText: l.maxSpeedKmh,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.speed, color: AppTheme.ink),
                     ),
                   ),
                 ),
@@ -152,10 +156,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   child: TextField(
                     controller: avgController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: '平均速度 (km/h)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.trending_up, color: AppTheme.ink),
+                    decoration: InputDecoration(
+                      labelText: l.avgSpeedKmh,
+                      border: const OutlineInputBorder(),
+                      prefixIcon:
+                          const Icon(Icons.trending_up, color: AppTheme.ink),
                     ),
                   ),
                 ),
@@ -167,7 +172,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('キャンセル'),
+                    child: Text(l.cancel),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -185,7 +190,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       // データを再読み込み
                       await _selectChild(_selectedChildId!, _selectedChildName);
                     },
-                    child: const Text('保存'),
+                    child: Text(l.save),
                   ),
                 ),
               ],
@@ -202,7 +207,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     if (_todayResults.isEmpty) return;
 
     final buffer = StringBuffer();
-    buffer.writeln('$_selectedChildName の今日の記録');
+    buffer.writeln(l.shareTitle(_selectedChildName));
     buffer.writeln('');
 
     for (int i = 0; i < _todayResults.length; i++) {
@@ -211,17 +216,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final maxSpd = r['max_speed_kmh'] as double?;
       final avgSpd = r['avg_speed_kmh'] as double?;
       final isBest = timeMs == _todayBest;
-      buffer.write('${i + 1}本目: ${_formatTime(timeMs)}秒');
-      if (maxSpd != null) buffer.write(' 最高${maxSpd.toStringAsFixed(1)}km/h');
-      if (avgSpd != null) buffer.write(' 平均${avgSpd.toStringAsFixed(1)}km/h');
-      if (isBest && _todayResults.length > 1) buffer.write(' ★ベスト');
+      buffer.write(l.shareLine(i + 1, _formatTime(timeMs)));
+      if (maxSpd != null) {
+        buffer.write(' ${l.topSpeedValue(maxSpd.toStringAsFixed(1))}');
+      }
+      if (avgSpd != null) {
+        buffer.write(' ${l.avgSpeedValue(avgSpd.toStringAsFixed(1))}');
+      }
+      if (isBest && _todayResults.length > 1) buffer.write(' ${l.shareBest}');
       buffer.writeln();
     }
 
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('結果をコピーしました！'), duration: Duration(seconds: 2)),
+        SnackBar(
+            content: Text(l.resultsCopied),
+            duration: const Duration(seconds: 2)),
       );
     }
   }
@@ -235,15 +246,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '解析・共有',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              Text(
+                l.tabAnalysis,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
 
               // 子ども選択（複数いる場合のみ表示）
               if (_children.length > 1) ...[
-                const Text('子どもを選択:', style: TextStyle(fontSize: 16)),
+                Text(l.selectChild, style: const TextStyle(fontSize: 16)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -279,14 +290,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _statColumn('今日の本数', '${_todayResults.length}'),
+                        _statColumn(l.todayCount, '${_todayResults.length}'),
                         _statColumn(
-                          '今日のベスト',
-                          _todayBest != null ? '${_formatTime(_todayBest!)}秒' : '-',
+                          l.todayBest,
+                          _todayBest != null
+                              ? l.timeSecShort(_formatTime(_todayBest!))
+                              : '-',
                         ),
                         _statColumn(
-                          '歴代ベスト',
-                          _allTimeBest != null ? '${_formatTime(_allTimeBest!)}秒' : '-',
+                          l.allTimeBest,
+                          _allTimeBest != null
+                              ? l.timeSecShort(_formatTime(_allTimeBest!))
+                              : '-',
                         ),
                       ],
                     ),
@@ -300,12 +315,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.speed, color: AppTheme.ink, size: 20),
-                              SizedBox(width: 8),
-                              Text('スピード記録',
-                                  style: TextStyle(
+                              const Icon(Icons.speed,
+                                  color: AppTheme.ink, size: 20),
+                              const SizedBox(width: 8),
+                              Text(l.speedRecords,
+                                  style: const TextStyle(
                                       fontSize: 16, fontWeight: FontWeight.bold)),
                             ],
                           ),
@@ -314,13 +330,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
                               _statColumn(
-                                '歴代 最高速度',
+                                l.bestTopSpeed,
                                 _bestMaxSpeed != null
                                     ? '${_bestMaxSpeed!.toStringAsFixed(1)} km/h'
                                     : '-',
                               ),
                               _statColumn(
-                                '歴代 平均速度ベスト',
+                                l.bestAvgSpeed,
                                 _bestAvgSpeed != null
                                     ? '${_bestAvgSpeed!.toStringAsFixed(1)} km/h'
                                     : '-',
@@ -334,20 +350,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
                 const SizedBox(height: 12),
 
-                const Row(
+                Row(
                   children: [
-                    Text('今日の走行一覧',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    SizedBox(width: 8),
-                    Text('タップで速度入力 / スワイプで削除',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text(l.todayRides,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(l.tapSwipeHint,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.grey)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
 
                 Expanded(
                   child: _todayResults.isEmpty
-                      ? const Center(child: Text('まだ今日の記録がありません'))
+                      ? Center(child: Text(l.noRidesToday))
                       : ListView.builder(
                           itemCount: _todayResults.length,
                           itemBuilder: (context, index) {
@@ -372,17 +393,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 return await showDialog<bool>(
                                   context: context,
                                   builder: (context) => AlertDialog(
-                                    title: const Text('記録を削除'),
-                                    content: Text('${_formatTime(timeMs)}秒 の記録を削除しますか？'),
+                                    title: Text(l.deleteRideTitle),
+                                    content: Text(
+                                        l.deleteRideMessage(_formatTime(timeMs))),
                                     actions: [
                                       TextButton(
                                         onPressed: () => Navigator.pop(context, false),
-                                        child: const Text('キャンセル'),
+                                        child: Text(l.cancel),
                                       ),
                                       TextButton(
                                         onPressed: () => Navigator.pop(context, true),
-                                        child: const Text('削除',
-                                            style: TextStyle(color: Colors.red)),
+                                        child: Text(l.delete,
+                                            style: const TextStyle(
+                                                color: Colors.red)),
                                       ),
                                     ],
                                   ),
@@ -401,7 +424,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                           fontSize: 20, color: AppTheme.ink)),
                                 ),
                                 title: Text(
-                                  '${_formatTime(timeMs)} 秒',
+                                  l.timeSec(_formatTime(timeMs)),
                                   style: TextStyle(
                                     fontSize: 20,
                                     fontWeight:
@@ -412,8 +435,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 subtitle: hasSpeed
                                     ? Text(
                                         [
-                                          if (maxSpd != null) '最高 ${maxSpd.toStringAsFixed(1)}km/h',
-                                          if (avgSpd != null) '平均 ${avgSpd.toStringAsFixed(1)}km/h',
+                                          if (maxSpd != null)
+                                            l.topSpeedValue(
+                                                maxSpd.toStringAsFixed(1)),
+                                          if (avgSpd != null)
+                                            l.avgSpeedValue(
+                                                avgSpd.toStringAsFixed(1)),
                                         ].join('  '),
                                         style: TextStyle(
                                           color: AppTheme.muted,
@@ -437,7 +464,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _todayResults.isNotEmpty ? _shareResults : null,
                     icon: const Icon(Icons.share),
-                    label: const Text('今日の記録をシェア'),
+                    label: Text(l.shareToday),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -446,10 +473,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ],
 
               if (_selectedChildId == null && _children.isEmpty)
-                const Expanded(
+                Expanded(
                   child: Center(
-                    child: Text('計測タブで子どもを登録してください',
-                        style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    child: Text(l.registerChildInTimer,
+                        style: const TextStyle(color: Colors.grey, fontSize: 16)),
                   ),
                 ),
             ],

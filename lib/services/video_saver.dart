@@ -2,18 +2,16 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
+import '../l10n/app_language.dart';
 
 /// 録画した動画の保存先（写真アプリ / 許可なしで失敗 / アプリ内に退避）
 enum VideoSaveResult { gallery, denied, appFolder }
 
 /// 録画した動画を写真アプリに保存する窓口（計測タブ・練習タブで共通）
 class VideoSaver {
-  static const String _album = 'ランバイクタイマー';
-
-  /// 写真アプリへのアクセスが無いときの案内文
-  static const String deniedMessage =
-      '写真へのアクセスが許可されていないため、写真アプリに保存できませんでした。\n'
-      '設定 → ランバイクタイマー → 写真 を「フルアクセス」にしてください';
+  /// 保存先アルバムの名前（日本語のときは「ランバイクタイマー」、ほかは「Runbike Timer」）
+  /// 案内文は画面側で各言語の翻訳（photoAccessDenied）を使う
+  static String get _album => AppLanguage.albumName;
 
   /// 動画ファイルを写真アプリ（ギャラリー）に保存
   /// 1. アルバム付きで保存（写真への「フルアクセス」が必要）

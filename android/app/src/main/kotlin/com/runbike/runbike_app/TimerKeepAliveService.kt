@@ -18,6 +18,8 @@ import android.os.IBinder
 class TimerKeepAliveService : Service() {
     companion object {
         const val ACTION_STOP = "com.runbike.runbike_app.STOP_KEEP_ALIVE"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_TEXT = "text"
         private const val CHANNEL_ID = "runbike_timer_running"
         private const val NOTIFICATION_ID = 1001
     }
@@ -30,7 +32,10 @@ class TimerKeepAliveService : Service() {
             return START_NOT_STICKY
         }
         try {
-            showAsForeground()
+            showAsForeground(
+                intent?.getStringExtra(EXTRA_TITLE) ?: "Runbike Timer",
+                intent?.getStringExtra(EXTRA_TEXT) ?: "Timer is running"
+            )
         } catch (e: Exception) {
             stopSelf()
         }
@@ -58,11 +63,11 @@ class TimerKeepAliveService : Service() {
     }
 
     @Suppress("DEPRECATION")
-    private fun showAsForeground() {
+    private fun showAsForeground(title: String, text: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "タイマー実行中",
+                title, // 設定画面に出る通知の種類名（アプリ名と同じにする）
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -84,8 +89,8 @@ class TimerKeepAliveService : Service() {
             Notification.Builder(this)
         }
         val notification = builder
-            .setContentTitle("ランバイクタイマー")
-            .setContentText("タイマーが動いています（タップで戻る）")
+            .setContentTitle(title)
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

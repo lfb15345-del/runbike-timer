@@ -1,3 +1,4 @@
+import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -14,10 +15,14 @@ import 'services/app_settings.dart';
 import 'services/background_keeper.dart';
 import 'services/web_camera_service.dart';
 import 'theme.dart';
+import 'l10n/app_language.dart';
+import 'l10n/app_localizations.dart';
 import 'widgets/runbike_mark.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 端末の言語から表示言語を決める（日本語・英語・繁体字・タイ語・韓国語）
+  AppLanguage.current = AppLanguage.resolve(PlatformDispatcher.instance.locales);
   await DatabaseService.init();
   // 音の基本設定（ほかのアプリの音と共存・裏に回っても鳴らせる）
   await BackgroundKeeper.init();
@@ -31,12 +36,15 @@ class RunbikeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ランバイクタイマー',
+      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
-      locale: const Locale('ja', 'JP'),
-      // 文字入力のメニュー（コピー・貼り付け）や日付などの標準部品も日本語にする
-      supportedLocales: const [Locale('ja', 'JP')],
+      // 表示言語は端末の言語設定に合わせる（対応外の言語は英語）
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeListResolutionCallback: (locales, supported) =>
+          AppLanguage.resolve(locales),
+      // 画面の文字の翻訳 + コピー・貼り付け等の標準部品の翻訳
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -93,7 +101,7 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
                 // ロゴマーク（アプリアイコンと同じ形）
                 const RunbikeMark(width: 220),
                 const SizedBox(height: 28),
-                const Text('ランバイクタイマー',
+                Text(AppLocalizations.of(context).appTitle,
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
@@ -118,7 +126,7 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('音声を準備中...',
+                  Text(AppLocalizations.of(context).audioPreparing,
                       style: TextStyle(fontSize: 16, color: Colors.white70)),
                 ] else ...[
                   Container(
@@ -128,7 +136,7 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
                       color: AppTheme.volt,
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Text('タップして開始',
+                    child: Text(AppLocalizations.of(context).tapToStart,
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
@@ -136,7 +144,7 @@ class _WebAudioUnlockScreenState extends State<WebAudioUnlockScreen> {
                         )),
                   ),
                   const SizedBox(height: 20),
-                  const Text('音を鳴らすために、最初に1回タップが必要です',
+                  Text(AppLocalizations.of(context).tapRequiredNote,
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 13, color: Colors.white54)),
                 ],
@@ -198,9 +206,10 @@ class _HomePageState extends State<HomePage> {
     if ((MeasureScreen.isRunning && MeasureScreen.isRecordingOn) ||
         (PracticeScreen.isRunning && PracticeScreen.isRecordingOn)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('録画中はタブを切り替えられません'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(
+              AppLocalizations.of(context).cannotSwitchTabWhileRecording),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -219,6 +228,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       // IndexedStack でタブ切替してもタイマーが消えない
       body: IndexedStack(
@@ -229,35 +239,35 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: _currentIndex,
         onDestinationSelected: _onTabTapped,
         // 選択色はテーマ（theme.dart）で一括管理
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.timer_outlined),
-            selectedIcon: Icon(Icons.timer),
-            label: '計測',
+            icon: const Icon(Icons.timer_outlined),
+            selectedIcon: const Icon(Icons.timer),
+            label: l.tabMeasure,
           ),
           NavigationDestination(
             // 稲妻 = ダッシュ練習のイメージ
-            icon: Icon(Icons.bolt_outlined),
-            selectedIcon: Icon(Icons.bolt),
-            label: '練習',
+            icon: const Icon(Icons.bolt_outlined),
+            selectedIcon: const Icon(Icons.bolt),
+            label: l.tabPractice,
           ),
           NavigationDestination(
             // タイム推移のグラフのイメージ
-            icon: Icon(Icons.insights_outlined),
-            selectedIcon: Icon(Icons.insights),
-            label: '解析・共有',
+            icon: const Icon(Icons.insights_outlined),
+            selectedIcon: const Icon(Icons.insights),
+            label: l.tabAnalysis,
           ),
           NavigationDestination(
             // ゴールの旗 = コースのイメージ
-            icon: Icon(Icons.flag_outlined),
-            selectedIcon: Icon(Icons.flag),
-            label: 'コース設定',
+            icon: const Icon(Icons.flag_outlined),
+            selectedIcon: const Icon(Icons.flag),
+            label: l.tabCourse,
           ),
           NavigationDestination(
             // 押すと「ピーーッ」と鳴るだけのボタン（画面は切り替わらない）
-            icon: Icon(Icons.sports, color: AppTheme.goRed),
-            selectedIcon: Icon(Icons.sports, color: AppTheme.goRed),
-            label: 'ホイッスル',
+            icon: const Icon(Icons.sports, color: AppTheme.goRed),
+            selectedIcon: const Icon(Icons.sports, color: AppTheme.goRed),
+            label: l.tabWhistle,
           ),
         ],
       ),

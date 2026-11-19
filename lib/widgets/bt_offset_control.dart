@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/app_settings.dart';
 import '../theme.dart';
+import '../l10n/app_localizations.dart';
 
 /// Bluetooth遅延補正の ± コントロール
 /// （これまで計測画面と練習画面に同じコードが重複していたのを共通化）
@@ -28,7 +29,8 @@ class BtOffsetControl extends StatelessWidget {
       children: [
         Icon(Icons.bluetooth, size: 18, color: activeColor),
         const SizedBox(width: 4),
-        Text('BT補正', style: TextStyle(fontSize: 13, color: activeColor)),
+        Text(AppLocalizations.of(context).btOffset,
+            style: TextStyle(fontSize: 13, color: activeColor)),
         const SizedBox(width: 8),
         SizedBox(
           width: 32,

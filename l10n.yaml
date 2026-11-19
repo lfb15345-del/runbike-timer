@@ -1,0 +1,7 @@
+# 多言語化の設定（flutter gen-l10n が読む）
+# 翻訳ファイル: lib/l10n/app_*.arb（日本語 app_ja.arb が基準）
+arb-dir: lib/l10n
+template-arb-file: app_ja.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

@@ -1,0 +1,6 @@
+/* アプリ名と、カメラ・マイク・写真の許可をお願いするときの文（ja） */
+"CFBundleDisplayName" = "ランバイクタイマー";
+"NSCameraUsageDescription" = "走行の様子を録画するためにカメラを使用します";
+"NSMicrophoneUsageDescription" = "録画時に周囲の音声を記録するためにマイクを使用します";
+"NSPhotoLibraryAddUsageDescription" = "録画した動画を写真ライブラリに保存します";
+"NSPhotoLibraryUsageDescription" = "録画した動画を写真ライブラリに保存するためにアクセスします";

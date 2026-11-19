@@ -1,11 +1,13 @@
 // App Store 用スクリーンショットを自動で作る道具（実機なしで、アプリの実際の画面を描いて保存する）
 //
 // 実行: flutter test tool/screenshots_test.dart   （check.bat からも実行される）
-// 出力: ランバイク/appstore_screenshots/latest/ に 1206x2622 のPNG
+// 出力: ランバイク/appstore_screenshots/latest/<言語>/ に 1206x2622 のPNG
+//       ja=日本語 / en=英語 / zh=繁体字中国語 / ko=韓国語 / th=タイ語
 //       （App Store Connect の「iPhone 6.3インチ」枠にそのまま入れられるサイズ）
 //
 // 仕組み: テスト用の仮想画面に本物の画面ウィジェットを表示して画像にする。
 // データベース・音・カメラは実機がないと動かないので、見本データを返す「代役」に差し替えている。
+// 日本語以外の文字のフォントは ランバイク/shot_fonts/ に置く（無い言語は撮らずに飛ばす）。
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -15,6 +17,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'package:runbike_app/l10n/app_language.dart';
+import 'package:runbike_app/l10n/app_localizations.dart';
 import 'package:runbike_app/screens/analysis_screen.dart';
 import 'package:runbike_app/screens/course_screen.dart';
 import 'package:runbike_app/screens/measure_screen.dart';
@@ -24,7 +28,53 @@ import 'package:runbike_app/services/database_service.dart';
 import 'package:runbike_app/theme.dart';
 
 final GlobalKey _shotKey = GlobalKey();
-const String _outDir = '../appstore_screenshots/latest';
+const String _outRoot = '../appstore_screenshots/latest';
+
+/// 撮影する言語ごとの設定（見本データの名前も、その国らしい名前にする）
+class _ShotLang {
+  const _ShotLang(
+    this.code,
+    this.locale, {
+    this.font,
+    this.fontFile,
+    required this.childName,
+    required this.courses,
+  });
+
+  final String code; // 出力フォルダ名
+  final Locale locale;
+  final String? font; // 本文フォント（null = 日本語の標準 Noto Sans JP）
+  final String? fontFile; // そのフォントのファイル（無ければその言語は飛ばす）
+  final String childName; // 見本の子どもの名前
+  final List<String> courses; // 見本のコース名（2つ）
+}
+
+const List<_ShotLang> _langs = [
+  _ShotLang('ja', Locale('ja'),
+      childName: 'ゆうた', courses: ['中央公園コース', '河川敷コース']),
+  _ShotLang('en', Locale('en'),
+      font: 'Noto Sans JP',
+      childName: 'Leo',
+      courses: ['Central Park Loop', 'Riverside Track']),
+  _ShotLang('zh', Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+      font: 'Noto Sans TC',
+      fontFile: '../shot_fonts/NotoSansTC.ttf',
+      childName: '小宇',
+      courses: ['中央公園賽道', '河濱賽道']),
+  _ShotLang('ko', Locale('ko'),
+      font: 'Noto Sans KR',
+      fontFile: '../shot_fonts/NotoSansKR.ttf',
+      childName: '지우',
+      courses: ['중앙공원 코스', '강변 코스']),
+  _ShotLang('th', Locale('th'),
+      font: 'Noto Sans Thai',
+      fontFile: '../shot_fonts/NotoSansThai.ttf',
+      childName: 'น้องภูมิ',
+      courses: ['สนามสวนกลาง', 'สนามริมแม่น้ำ']),
+];
+
+/// いま撮影している言語
+_ShotLang _lang = _langs.first;
 
 /// フォントを読み込む（読み込まないとテスト画面では文字が四角になる）
 Future<void> _loadFont(String family, List<String> paths) async {
@@ -96,7 +146,7 @@ Map<String, Object?> _fakeQuery(String sql) {
   }
   if (sql.contains('FROM child')) {
     return _table(['id', 'name', 'created_at'], [
-      [1, 'ゆうた', '2026-04-01T09:00:00'],
+      [1, _lang.childName, '2026-04-01T09:00:00'],
     ]);
   }
   if (sql.contains('FROM course') && sql.contains('DESC')) {
@@ -104,9 +154,10 @@ Map<String, Object?> _fakeQuery(String sql) {
       'id', 'date', 'name', 'length_m', 'first_straight_m', 'curve_count',
       'surface', 'weather', 'note', 'created_at',
     ];
+    // 路面・天気はデータベースには日本語で入っている（画面では各言語に翻訳される）
     return _table(columns, [
-      [2, '2026-11-08', '中央公園コース', 120, 25, 4, 'アスファルト', '晴れ', '', ''],
-      [1, '2026-11-01', '河川敷コース', 90, 20, 2, '芝生', 'くもり', '', ''],
+      [2, '2026-11-08', _lang.courses[0], 120, 25, 4, 'アスファルト', '晴れ', '', ''],
+      [1, '2026-11-01', _lang.courses[1], 90, 20, 2, '芝生', 'くもり', '', ''],
     ]);
   }
   return _table(['id'], []);
@@ -119,34 +170,40 @@ Widget _frame(Widget screen, int tabIndex) {
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: Scaffold(
-        body: screen,
-        // main.dart の下タブと同じ並び
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: tabIndex,
-          destinations: const [
-            NavigationDestination(
-                icon: Icon(Icons.timer_outlined),
-                selectedIcon: Icon(Icons.timer),
-                label: '計測'),
-            NavigationDestination(
-                icon: Icon(Icons.bolt_outlined),
-                selectedIcon: Icon(Icons.bolt),
-                label: '練習'),
-            NavigationDestination(
-                icon: Icon(Icons.insights_outlined),
-                selectedIcon: Icon(Icons.insights),
-                label: '解析・共有'),
-            NavigationDestination(
-                icon: Icon(Icons.flag_outlined),
-                selectedIcon: Icon(Icons.flag),
-                label: 'コース設定'),
-            NavigationDestination(
-                icon: Icon(Icons.sports, color: AppTheme.goRed),
-                label: 'ホイッスル'),
-          ],
-        ),
-      ),
+      locale: _lang.locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(builder: (context) {
+        final l = AppLocalizations.of(context);
+        return Scaffold(
+          body: screen,
+          // main.dart の下タブと同じ並び
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: tabIndex,
+            destinations: [
+              NavigationDestination(
+                  icon: const Icon(Icons.timer_outlined),
+                  selectedIcon: const Icon(Icons.timer),
+                  label: l.tabMeasure),
+              NavigationDestination(
+                  icon: const Icon(Icons.bolt_outlined),
+                  selectedIcon: const Icon(Icons.bolt),
+                  label: l.tabPractice),
+              NavigationDestination(
+                  icon: const Icon(Icons.insights_outlined),
+                  selectedIcon: const Icon(Icons.insights),
+                  label: l.tabAnalysis),
+              NavigationDestination(
+                  icon: const Icon(Icons.flag_outlined),
+                  selectedIcon: const Icon(Icons.flag),
+                  label: l.tabCourse),
+              NavigationDestination(
+                  icon: const Icon(Icons.sports, color: AppTheme.goRed),
+                  label: l.tabWhistle),
+            ],
+          ),
+        );
+      }),
     ),
   );
 }
@@ -167,7 +224,7 @@ Future<void> _shoot(WidgetTester tester, String name) async {
   await tester.runAsync(() async {
     final image = await boundary.toImage(pixelRatio: 3.0);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    final file = File('$_outDir/$name.png');
+    final file = File('$_outRoot/${_lang.code}/$name.png');
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(data!.buffer.asUint8List());
   });
@@ -201,6 +258,11 @@ void main() {
       'assets/fonts/BarlowCondensed-BoldItalic.ttf',
       'assets/fonts/BarlowCondensed-ExtraBoldItalic.ttf',
     ]);
+    for (final lang in _langs) {
+      if (lang.font != null && lang.fontFile != null) {
+        await _loadFont(lang.font!, [lang.fontFile!]);
+      }
+    }
     final flutterRoot = Platform.environment['FLUTTER_ROOT'] ?? 'C:/flutter';
     await _loadFont('MaterialIcons', [
       '$flutterRoot/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
@@ -229,84 +291,106 @@ void main() {
     await DatabaseService.init();
   });
 
-  testWidgets('01 計測（待機中）', (tester) async {
-    _useIphoneSize(tester);
-    AppSettings.currentTab.value = 0;
-    await tester.pumpWidget(_frame(const MeasureScreen(), 0));
-    await _settle(tester);
-    await _shoot(tester, '01_measure');
-    await _cleanUp(tester);
+  tearDownAll(() {
+    AppLanguage.current = const Locale('ja');
+    AppTheme.bodyFontOverride = null;
+    AppTheme.bodyFallbackOverride = null;
   });
 
-  testWidgets('02 計測中（GO）', (tester) async {
-    _useIphoneSize(tester);
-    AppSettings.currentTab.value = 0;
-    await tester.pumpWidget(_frame(const MeasureScreen(), 0));
-    await _settle(tester);
-    // サイレントを選ぶとカウントダウンなしで即計測が始まる
-    await tester.tap(find.text('サイレント'));
-    await tester.pump();
-    await tester.tap(find.text('START'));
-    await tester.pump();
-    // 本物の時間を7秒ちょっと進めて、タイムらしい数字にする
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 7310)));
-    await tester.pump(const Duration(milliseconds: 30));
-    // ボタンを押したときの波紋（グレーの重なり）が消えるまで待つ
-    await tester.pump(const Duration(milliseconds: 800));
-    await tester.pump(const Duration(milliseconds: 800));
-    await _shoot(tester, '02_measure_go');
-    await _cleanUp(tester);
-  });
+  for (final lang in _langs) {
+    // フォントが置かれていない言語は撮らない
+    if (lang.fontFile != null && !File(lang.fontFile!).existsSync()) continue;
+    final l = lookupAppLocalizations(lang.locale);
 
-  testWidgets('03 練習（設定）', (tester) async {
-    _useIphoneSize(tester);
-    AppSettings.currentTab.value = 1;
-    await tester.pumpWidget(_frame(const PracticeScreen(), 1));
-    await _settle(tester);
-    await _shoot(tester, '03_practice');
-    await _cleanUp(tester);
-  });
+    group(lang.code, () {
+      setUp(() {
+        _lang = lang;
+        AppLanguage.current = lang.locale;
+        AppTheme.bodyFontOverride = lang.font;
+        AppTheme.bodyFallbackOverride =
+            lang.font == null ? null : const ['Noto Sans JP'];
+      });
 
-  testWidgets('04 練習中（GO）', (tester) async {
-    _useIphoneSize(tester);
-    AppSettings.currentTab.value = 1;
-    await tester.pumpWidget(_frame(const PracticeScreen(), 1));
-    await _settle(tester);
-    await tester.tap(find.text('無音'));
-    await tester.pump();
-    await tester.tap(find.text('START'));
-    await tester.pump();
-    // スタート音のカウントダウン（約10.6秒）を早送り → GO!
-    await tester.pump(const Duration(seconds: 11));
-    await tester.pump(const Duration(milliseconds: 30));
-    // 本物の時間を進めて、残り12秒台にする
-    // （3秒以上タイマーを止めると「スマホに止められた」と判断されて一時停止になるので、小分けに進める）
-    for (var i = 0; i < 3; i++) {
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 2500)));
-      await tester.pump(const Duration(milliseconds: 30));
-    }
-    await tester.pump(const Duration(milliseconds: 300));
-    await _shoot(tester, '04_practice_go');
-    await _cleanUp(tester);
-  });
+      testWidgets('01 計測（待機中）', (tester) async {
+        _useIphoneSize(tester);
+        AppSettings.currentTab.value = 0;
+        await tester.pumpWidget(_frame(const MeasureScreen(), 0));
+        await _settle(tester);
+        await _shoot(tester, '01_measure');
+        await _cleanUp(tester);
+      });
 
-  testWidgets('05 解析・共有', (tester) async {
-    _useIphoneSize(tester);
-    AppSettings.currentTab.value = 2;
-    await tester.pumpWidget(_frame(const AnalysisScreen(), 2));
-    await _settle(tester);
-    await _shoot(tester, '05_analysis');
-    await _cleanUp(tester);
-  });
+      testWidgets('02 計測中（GO）', (tester) async {
+        _useIphoneSize(tester);
+        AppSettings.currentTab.value = 0;
+        await tester.pumpWidget(_frame(const MeasureScreen(), 0));
+        await _settle(tester);
+        // サイレントを選ぶとカウントダウンなしで即計測が始まる
+        await tester.tap(find.text(l.soundSilent));
+        await tester.pump();
+        await tester.tap(find.text('START'));
+        await tester.pump();
+        // 本物の時間を7秒ちょっと進めて、タイムらしい数字にする
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 7310)));
+        await tester.pump(const Duration(milliseconds: 30));
+        // ボタンを押したときの波紋（グレーの重なり）が消えるまで待つ
+        await tester.pump(const Duration(milliseconds: 800));
+        await tester.pump(const Duration(milliseconds: 800));
+        await _shoot(tester, '02_measure_go');
+        await _cleanUp(tester);
+      });
 
-  testWidgets('06 コース設定', (tester) async {
-    _useIphoneSize(tester);
-    AppSettings.currentTab.value = 3;
-    await tester.pumpWidget(_frame(const CourseScreen(), 3));
-    await _settle(tester);
-    await _shoot(tester, '06_course');
-    await _cleanUp(tester);
-  });
+      testWidgets('03 練習（設定）', (tester) async {
+        _useIphoneSize(tester);
+        AppSettings.currentTab.value = 1;
+        await tester.pumpWidget(_frame(const PracticeScreen(), 1));
+        await _settle(tester);
+        await _shoot(tester, '03_practice');
+        await _cleanUp(tester);
+      });
+
+      testWidgets('04 練習中（GO）', (tester) async {
+        _useIphoneSize(tester);
+        AppSettings.currentTab.value = 1;
+        await tester.pumpWidget(_frame(const PracticeScreen(), 1));
+        await _settle(tester);
+        await tester.tap(find.text(l.bgmOff));
+        await tester.pump();
+        await tester.tap(find.text('START'));
+        await tester.pump();
+        // スタート音のカウントダウン（約10.6秒）を早送り → GO!
+        await tester.pump(const Duration(seconds: 11));
+        await tester.pump(const Duration(milliseconds: 30));
+        // 本物の時間を進めて、残り12秒台にする
+        // （3秒以上タイマーを止めると「スマホに止められた」と判断されて一時停止になるので、小分けに進める）
+        for (var i = 0; i < 3; i++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 2500)));
+          await tester.pump(const Duration(milliseconds: 30));
+        }
+        await tester.pump(const Duration(milliseconds: 300));
+        await _shoot(tester, '04_practice_go');
+        await _cleanUp(tester);
+      });
+
+      testWidgets('05 解析・共有', (tester) async {
+        _useIphoneSize(tester);
+        AppSettings.currentTab.value = 2;
+        await tester.pumpWidget(_frame(const AnalysisScreen(), 2));
+        await _settle(tester);
+        await _shoot(tester, '05_analysis');
+        await _cleanUp(tester);
+      });
+
+      testWidgets('06 コース設定', (tester) async {
+        _useIphoneSize(tester);
+        AppSettings.currentTab.value = 3;
+        await tester.pumpWidget(_frame(const CourseScreen(), 3));
+        await _settle(tester);
+        await _shoot(tester, '06_course');
+        await _cleanUp(tester);
+      });
+    });
+  }
 }
