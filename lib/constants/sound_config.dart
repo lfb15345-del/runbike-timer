@@ -53,18 +53,18 @@ class SoundConfig {
     key: 'bmx',
     label: 'BMX',
     assetPath: 'sounds/bmx_1.wav',
-    offsetMs: 1960,
+    offsetMs: 5084,
   );
 
   /// BMXの音の種類（ファイル名と、再生開始から「ピーー」が鳴り始めるまでの時間）
   /// 待ち時間: 1.5秒 + ランダム0.1〜2.7秒（UCIルール）→ ピッ(0) ピッ(120) ピッ(240) ピーー(360ms〜2.25秒)
   static const bmxVariants = [
-    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_1.wav', offsetMs: 1960),
-    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_2.wav', offsetMs: 2460),
-    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_3.wav', offsetMs: 2960),
-    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_4.wav', offsetMs: 3460),
-    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_5.wav', offsetMs: 4060),
-    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_6.wav', offsetMs: 4560),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_1.wav', offsetMs: 5084),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_2.wav', offsetMs: 5584),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_3.wav', offsetMs: 6084),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_4.wav', offsetMs: 6584),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_5.wav', offsetMs: 7184),
+    StartSound(key: 'bmx', label: 'BMX', assetPath: 'sounds/bmx_6.wav', offsetMs: 7684),
   ];
 
   static final Random _random = Random();

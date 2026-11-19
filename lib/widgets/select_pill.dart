@@ -100,6 +100,24 @@ class SegmentedPills extends StatelessWidget {
     this.compact = false,
   });
 
+  /// 文字の実際の幅を測る（ボタンの幅の配分に使う）
+  double _labelWidth(BuildContext context, SegmentOption option) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: option.label,
+        style: DefaultTextStyle.of(context).style.merge(TextStyle(
+              fontSize: compact ? 13 : 14,
+              fontWeight: FontWeight.bold,
+            )),
+      ),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final iconWidth = option.icon != null ? (compact ? 14 : 16) + 4 : 0;
+    return painter.width + iconWidth + 18; // 18 = 左右の余白
+  }
+
   @override
   Widget build(BuildContext context) {
     final height = compact ? 34.0 : 42.0;
@@ -117,6 +135,8 @@ class SegmentedPills extends StatelessWidget {
             final selected = option.key == selectedKey;
             final foreground = selected ? Colors.white : AppTheme.ink;
             return Expanded(
+              // 文字の長さに合わせて幅を配分（全体が収まらないときは文字が少し縮む）
+              flex: _labelWidth(context, option).round(),
               child: GestureDetector(
                 onTap: onChanged == null ? null : () => onChanged!(option.key),
                 behavior: HitTestBehavior.opaque,

@@ -177,7 +177,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get soundFinal => 'รอบชิง';
 
   @override
-  String get soundSemi => 'รอบรองชนะเลิศ';
+  String get soundSemi => 'รอบรอง';
 
   @override
   String get bgmNone => 'ไม่มี';
