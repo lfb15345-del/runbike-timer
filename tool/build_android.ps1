@@ -23,6 +23,8 @@ $versionCode = $wanted.Groups[2].Value
 Write-Output "ビルドするバージョン: $versionName ($versionCode)"
 
 # 2. ビルド
+# 前回のビルドの残り（古いプラグインの部品）が混ざると失敗することがあるため、毎回まっさらにしてから作る
+flutter clean | Out-Null
 flutter build apk --release
 if ($LASTEXITCODE -ne 0) { throw 'APKのビルドに失敗しました' }
 $apk = Join-Path $buildDir 'build\app\outputs\flutter-apk\app-release.apk'
