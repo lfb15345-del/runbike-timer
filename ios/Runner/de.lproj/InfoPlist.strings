@@ -1,0 +1,6 @@
+/* アプリ名と、カメラ・マイク・写真の許可をお願いするときの文（de） */
+"CFBundleDisplayName" = "Laufrad-Timer";
+"NSCameraUsageDescription" = "Die Kamera wird verwendet, um Videos der Fahrten aufzunehmen.";
+"NSMicrophoneUsageDescription" = "Das Mikrofon wird verwendet, um bei Videos den Ton aufzunehmen.";
+"NSPhotoLibraryAddUsageDescription" = "Aufgenommene Videos werden in deiner Fotomediathek gespeichert.";
+"NSPhotoLibraryUsageDescription" = "Der Zugriff wird benötigt, um aufgenommene Videos in deiner Fotomediathek zu speichern.";

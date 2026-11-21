@@ -1,5 +1,5 @@
 """
-App Store 用の「見出し付きスクリーンショット」を作る道具（5言語）
+App Store 用の「見出し付きスクリーンショット」を作る道具（6言語）
 
 使い方（runbike_app フォルダで実行。Pillow が必要。タイ語をきれいに出すには raqm 対応の Pillow）:
   1) flutter test tool/screenshots_test.dart   … アプリの実際の画面を言語ごとに撮る
@@ -7,7 +7,7 @@ App Store 用の「見出し付きスクリーンショット」を作る道具�
 
 入力: ../appstore_screenshots/latest/<言語>/*.png
 出力: ../appstore_screenshots/store/<言語>/ に 1206x2622 のPNG（App Store の 6.3インチ枠用）
-      言語: ja=日本語 / en=英語 / zh=繁体字中国語 / ko=韓国語 / th=タイ語
+      言語: ja=日本語 / en=英語 / zh=繁体字中国語 / ko=韓国語 / th=タイ語 / de=ドイツ語
 見出しの文言は下の CAPTIONS を書き換える。並び順 = ストアに並べる順。
 日本語以外のフォントは ../shot_fonts/ に置く（無い言語は飛ばす）。
 """
@@ -27,6 +27,7 @@ FONTS = {
     'zh': os.path.join(EXTRA_FONTS, 'NotoSansTC.ttf'),
     'ko': os.path.join(EXTRA_FONTS, 'NotoSansKR.ttf'),
     'th': os.path.join(EXTRA_FONTS, 'NotoSansThai.ttf'),
+    'de': JP_FONT,
 }
 
 W, H = 1206, 2622
@@ -86,6 +87,14 @@ CAPTIONS = {
         ('สถิติที่ดีที่สุด\nเห็นได้ทันที', 'บันทึกและแชร์ผลของลูกแต่ละคน'),
         ('ตั้งเมนูฝึก\nได้ตามใจ', 'ปรับเวลาปั่น เวลาพัก และจำนวนรอบได้'),
         ('บันทึกสนาม\nและสภาพอากาศ', 'จำได้ว่าปั่นที่ไหน ในสภาพแบบไหน'),
+    ],
+    'de': [
+        ('Startsignal\nwie im Rennen', 'Bei 3, 2, 1, GO! startet der Timer von selbst'),
+        ('Im Ziel nur\neinmal tippen', 'Große Zahlen, auch von Weitem gut lesbar'),
+        ('Intervalltraining\nleicht gemacht', 'Farben und Töne zeigen Fahren und Pause an'),
+        ('Bestzeiten\nauf einen Blick', 'Fortschritt jedes Kindes speichern und teilen'),
+        ('Eigenen Trainings-\nplan erstellen', 'Fahrzeit, Pause und Runden einstellen'),
+        ('Strecke und Wetter\nfesthalten', 'Wo und wie jede Fahrt lief, bleibt gespeichert'),
     ],
 }
 

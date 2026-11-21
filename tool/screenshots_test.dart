@@ -2,7 +2,7 @@
 //
 // 実行: flutter test tool/screenshots_test.dart   （check.bat からも実行される）
 // 出力: ランバイク/appstore_screenshots/latest/<言語>/ に 1206x2622 のPNG
-//       ja=日本語 / en=英語 / zh=繁体字中国語 / ko=韓国語 / th=タイ語
+//       ja=日本語 / en=英語 / zh=繁体字中国語 / ko=韓国語 / th=タイ語 / de=ドイツ語
 //       （App Store Connect の「iPhone 6.3インチ」枠にそのまま入れられるサイズ）
 //
 // 仕組み: テスト用の仮想画面に本物の画面ウィジェットを表示して画像にする。
@@ -72,6 +72,10 @@ const List<_ShotLang> _langs = [
       fontFile: '../shot_fonts/NotoSansThai.ttf',
       childName: 'น้องภูมิ',
       courses: ['สนามสวนกลาง', 'สนามริมแม่น้ำ']),
+  _ShotLang('de', Locale('de'),
+      font: 'Noto Sans JP',
+      childName: 'Emma',
+      courses: ['Runde im Stadtpark', 'Strecke am Fluss']),
 ];
 
 /// いま撮影している言語

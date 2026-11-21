@@ -1,11 +1,11 @@
 import 'dart:ui';
 
 /// 端末の言語設定から、アプリで使う言語を決める。
-/// 対応: 日本語・英語・繁体字中国語・タイ語・韓国語。それ以外の言語は英語で表示する。
+/// 対応: 日本語・英語・繁体字中国語・タイ語・韓国語・ドイツ語。それ以外の言語は英語で表示する。
 class AppLanguage {
   AppLanguage._();
 
-  static const List<String> supportedCodes = ['ja', 'en', 'zh', 'th', 'ko'];
+  static const List<String> supportedCodes = ['ja', 'en', 'zh', 'th', 'ko', 'de'];
 
   /// 起動時に決めた言語（テーマのフォント選びなどで使う）
   static Locale current = const Locale('ja');
