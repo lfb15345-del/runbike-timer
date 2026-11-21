@@ -26,6 +26,7 @@ import 'package:runbike_app/screens/practice_screen.dart';
 import 'package:runbike_app/services/app_settings.dart';
 import 'package:runbike_app/services/database_service.dart';
 import 'package:runbike_app/theme.dart';
+import 'package:runbike_app/widgets/share_card.dart';
 
 final GlobalKey _shotKey = GlobalKey();
 const String _outRoot = '../appstore_screenshots/latest';
@@ -389,6 +390,39 @@ void main() {
         await tester.pumpWidget(_frame(const CourseScreen(), 3));
         await _settle(tester);
         await _shoot(tester, '06_course');
+        await _cleanUp(tester);
+      });
+
+      testWidgets('07 シェア画像', (tester) async {
+        _useIphoneSize(tester);
+        await tester.pumpWidget(MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(),
+          locale: _lang.locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Material(
+            color: AppTheme.paper,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: RepaintBoundary(
+                key: _shotKey,
+                child: ShareCard(
+                  data: ShareCardData(
+                    childName: _lang.childName,
+                    date: DateTime(2026, 11, 22),
+                    timesMs: const [13120, 12840, 12480, 12910, 12650],
+                    bestMs: 12480,
+                    allTimeBestMs: 12480,
+                    format: (ms) => (ms / 1000).toStringAsFixed(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ));
+        await _settle(tester);
+        await _shoot(tester, '07_share_card');
         await _cleanUp(tester);
       });
     });

@@ -902,6 +902,42 @@ abstract class AppLocalizations {
   /// In ja, this message translates to:
   /// **'タイマーが動いています（タップで戻る）'**
   String get bgNotificationText;
+
+  /// シェアの最後に付けるハッシュタグとApp Storeのリンク
+  ///
+  /// In ja, this message translates to:
+  /// **'#ランバイクタイマー #ランバイク\nhttps://apps.apple.com/app/id6788356167'**
+  String get shareFooter;
+
+  /// No description provided for @shareImage.
+  ///
+  /// In ja, this message translates to:
+  /// **'画像でシェア'**
+  String get shareImage;
+
+  /// No description provided for @shareText.
+  ///
+  /// In ja, this message translates to:
+  /// **'テキスト'**
+  String get shareText;
+
+  /// No description provided for @cardPersonalBest.
+  ///
+  /// In ja, this message translates to:
+  /// **'自己ベスト！'**
+  String get cardPersonalBest;
+
+  /// No description provided for @cardShareButton.
+  ///
+  /// In ja, this message translates to:
+  /// **'この画像をシェア'**
+  String get cardShareButton;
+
+  /// No description provided for @cardFooter.
+  ///
+  /// In ja, this message translates to:
+  /// **'App Store で配信中'**
+  String get cardFooter;
 }
 
 class _AppLocalizationsDelegate

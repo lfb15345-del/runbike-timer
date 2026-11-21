@@ -457,4 +457,23 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get bgNotificationText => 'กำลังจับเวลาอยู่ (แตะเพื่อกลับ)';
+
+  @override
+  String get shareFooter =>
+      '#RunbikeTimer #จักรยานขาไถ\nhttps://apps.apple.com/app/id6788356167';
+
+  @override
+  String get shareImage => 'แชร์รูปภาพ';
+
+  @override
+  String get shareText => 'ข้อความ';
+
+  @override
+  String get cardPersonalBest => 'สถิติที่ดีที่สุด!';
+
+  @override
+  String get cardShareButton => 'แชร์รูปนี้';
+
+  @override
+  String get cardFooter => 'ดาวน์โหลดได้ที่ App Store';
 }

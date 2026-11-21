@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/database_service.dart';
 import '../theme.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/share_card.dart';
 
 /// 解析・共有タブ
 class AnalysisScreen extends StatefulWidget {
@@ -202,6 +204,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
+  /// 今日の記録を画像カードにしてシェア（プレビューしてからシェア）
+  Future<void> _shareImage() async {
+    if (_todayResults.isEmpty || _todayBest == null) return;
+    await showShareCardSheet(
+      context,
+      ShareCardData(
+        childName: _selectedChildName,
+        date: DateTime.now(),
+        timesMs: _todayResults.map((r) => r['time_ms'] as int).toList(),
+        bestMs: _todayBest!,
+        allTimeBestMs: _allTimeBest,
+        format: _formatTime,
+      ),
+    );
+  }
+
   /// シェアテキストを作成（今日の記録一覧 + 速度）
   Future<void> _shareResults() async {
     if (_todayResults.isEmpty) return;
@@ -227,6 +245,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       buffer.writeln();
     }
 
+    // 最後にハッシュタグとApp Storeのリンク（見た人がアプリを探せるように）
+    buffer.writeln();
+    buffer.write(l.shareFooter);
+
+    // OS標準のシェア画面（LINE・メッセージ・SNSなど）。使えないときはコピーにする
+    final box = context.findRenderObject() as RenderBox?;
+    try {
+      await SharePlus.instance.share(ShareParams(
+        text: buffer.toString(),
+        sharePositionOrigin:
+            box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+      ));
+      return;
+    } catch (e) {
+      debugPrint('テキストシェアのエラー: $e');
+    }
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -458,17 +492,32 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         ),
                 ),
 
-                // シェアボタン
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _todayResults.isNotEmpty ? _shareResults : null,
-                    icon: const Icon(Icons.share),
-                    label: Text(l.shareToday),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                // シェアボタン（画像 / テキスト）
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            _todayResults.isNotEmpty ? _shareImage : null,
+                        icon: const Icon(Icons.image_outlined),
+                        label: Text(l.shareImage),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed:
+                          _todayResults.isNotEmpty ? _shareResults : null,
+                      icon: const Icon(Icons.share, size: 18),
+                      label: Text(l.shareText),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 14),
+                      ),
+                    ),
+                  ],
                 ),
               ],
 

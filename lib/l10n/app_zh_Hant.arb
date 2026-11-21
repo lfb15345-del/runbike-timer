@@ -132,5 +132,11 @@
   "courseStraightShort": "直線{v}m",
   "courseCurvesShort": "{n}個彎道",
   "memoValue": "備註：{note}",
-  "bgNotificationText": "計時進行中（點一下返回）"
+  "bgNotificationText": "計時進行中（點一下返回）",
+  "shareFooter": "#滑步車計時器 #滑步車\nhttps://apps.apple.com/app/id6788356167",
+  "shareImage": "分享圖片",
+  "shareText": "文字",
+  "cardPersonalBest": "個人最佳！",
+  "cardShareButton": "分享這張圖片",
+  "cardFooter": "App Store 上架中"
 }

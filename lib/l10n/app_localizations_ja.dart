@@ -454,4 +454,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bgNotificationText => 'タイマーが動いています（タップで戻る）';
+
+  @override
+  String get shareFooter =>
+      '#ランバイクタイマー #ランバイク\nhttps://apps.apple.com/app/id6788356167';
+
+  @override
+  String get shareImage => '画像でシェア';
+
+  @override
+  String get shareText => 'テキスト';
+
+  @override
+  String get cardPersonalBest => '自己ベスト！';
+
+  @override
+  String get cardShareButton => 'この画像をシェア';
+
+  @override
+  String get cardFooter => 'App Store で配信中';
 }

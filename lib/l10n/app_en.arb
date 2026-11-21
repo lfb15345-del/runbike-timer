@@ -132,5 +132,11 @@
   "courseStraightShort": "straight {v} m",
   "courseCurvesShort": "{n} curves",
   "memoValue": "Notes: {note}",
-  "bgNotificationText": "Timer is running (tap to return)"
+  "bgNotificationText": "Timer is running (tap to return)",
+  "shareFooter": "#RunbikeTimer #balancebike\nhttps://apps.apple.com/app/id6788356167",
+  "shareImage": "Share image",
+  "shareText": "Text",
+  "cardPersonalBest": "Personal best!",
+  "cardShareButton": "Share this image",
+  "cardFooter": "Available on the App Store"
 }

@@ -458,4 +458,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bgNotificationText => 'Timer is running (tap to return)';
+
+  @override
+  String get shareFooter =>
+      '#RunbikeTimer #balancebike\nhttps://apps.apple.com/app/id6788356167';
+
+  @override
+  String get shareImage => 'Share image';
+
+  @override
+  String get shareText => 'Text';
+
+  @override
+  String get cardPersonalBest => 'Personal best!';
+
+  @override
+  String get cardShareButton => 'Share this image';
+
+  @override
+  String get cardFooter => 'Available on the App Store';
 }

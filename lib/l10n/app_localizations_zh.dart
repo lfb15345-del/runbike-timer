@@ -454,6 +454,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bgNotificationText => '計時進行中（點一下返回）';
+
+  @override
+  String get shareFooter =>
+      '#滑步車計時器 #滑步車\nhttps://apps.apple.com/app/id6788356167';
+
+  @override
+  String get shareImage => '分享圖片';
+
+  @override
+  String get shareText => '文字';
+
+  @override
+  String get cardPersonalBest => '個人最佳！';
+
+  @override
+  String get cardShareButton => '分享這張圖片';
+
+  @override
+  String get cardFooter => 'App Store 上架中';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -906,4 +925,23 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get bgNotificationText => '計時進行中（點一下返回）';
+
+  @override
+  String get shareFooter =>
+      '#滑步車計時器 #滑步車\nhttps://apps.apple.com/app/id6788356167';
+
+  @override
+  String get shareImage => '分享圖片';
+
+  @override
+  String get shareText => '文字';
+
+  @override
+  String get cardPersonalBest => '個人最佳！';
+
+  @override
+  String get cardShareButton => '分享這張圖片';
+
+  @override
+  String get cardFooter => 'App Store 上架中';
 }

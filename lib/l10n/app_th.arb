@@ -132,5 +132,11 @@
   "courseStraightShort": "ทางตรง {v} ม.",
   "courseCurvesShort": "{n} โค้ง",
   "memoValue": "โน้ต: {note}",
-  "bgNotificationText": "กำลังจับเวลาอยู่ (แตะเพื่อกลับ)"
+  "bgNotificationText": "กำลังจับเวลาอยู่ (แตะเพื่อกลับ)",
+  "shareFooter": "#RunbikeTimer #จักรยานขาไถ\nhttps://apps.apple.com/app/id6788356167",
+  "shareImage": "แชร์รูปภาพ",
+  "shareText": "ข้อความ",
+  "cardPersonalBest": "สถิติที่ดีที่สุด!",
+  "cardShareButton": "แชร์รูปนี้",
+  "cardFooter": "ดาวน์โหลดได้ที่ App Store"
 }

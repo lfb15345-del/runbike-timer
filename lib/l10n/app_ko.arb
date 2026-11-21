@@ -132,5 +132,11 @@
   "courseStraightShort": "직선 {v}m",
   "courseCurvesShort": "커브 {n}",
   "memoValue": "메모: {note}",
-  "bgNotificationText": "타이머 작동 중 (탭하여 돌아가기)"
+  "bgNotificationText": "타이머 작동 중 (탭하여 돌아가기)",
+  "shareFooter": "#런바이크타이머 #밸런스바이크\nhttps://apps.apple.com/app/id6788356167",
+  "shareImage": "이미지 공유",
+  "shareText": "텍스트",
+  "cardPersonalBest": "개인 최고 기록!",
+  "cardShareButton": "이 이미지 공유",
+  "cardFooter": "App Store에서 다운로드"
 }

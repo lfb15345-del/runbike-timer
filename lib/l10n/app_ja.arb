@@ -418,5 +418,14 @@
     }
   },
   "bgNotificationText": "タイマーが動いています（タップで戻る）",
-  "@bgNotificationText": {}
+  "@bgNotificationText": {},
+  "shareFooter": "#ランバイクタイマー #ランバイク\nhttps://apps.apple.com/app/id6788356167",
+  "shareImage": "画像でシェア",
+  "shareText": "テキスト",
+  "cardPersonalBest": "自己ベスト！",
+  "cardShareButton": "この画像をシェア",
+  "cardFooter": "App Store で配信中",
+  "@shareFooter": {
+    "description": "シェアの最後に付けるハッシュタグとApp Storeのリンク"
+  }
 }

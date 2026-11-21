@@ -454,4 +454,23 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get bgNotificationText => '타이머 작동 중 (탭하여 돌아가기)';
+
+  @override
+  String get shareFooter =>
+      '#런바이크타이머 #밸런스바이크\nhttps://apps.apple.com/app/id6788356167';
+
+  @override
+  String get shareImage => '이미지 공유';
+
+  @override
+  String get shareText => '텍스트';
+
+  @override
+  String get cardPersonalBest => '개인 최고 기록!';
+
+  @override
+  String get cardShareButton => '이 이미지 공유';
+
+  @override
+  String get cardFooter => 'App Store에서 다운로드';
 }
