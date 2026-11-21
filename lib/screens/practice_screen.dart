@@ -177,7 +177,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 練習中に別のアプリを開いても、止めずにそのまま進める（BackgroundKeeper が動かし続ける）。
+    // 練習中に別のアプリを開いても、止めずにそのまま進める（Android は BackgroundKeeper が動かし続ける）。
     // 万一スマホ側に止められてしまった場合は、タイマー側（_startCountdownTimer）が
     // それに気づいて「一時停止」にする
 

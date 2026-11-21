@@ -83,10 +83,6 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
 	<!-- App Storeのイベントなどから「runbiketimer://」でアプリを開けるようにする -->
 	<key>CFBundleURLTypes</key>
 	<array>
